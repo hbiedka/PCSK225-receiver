@@ -22,7 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <math.h>
-//#include "am_wave.h"
+#include "am_wave.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -34,7 +34,7 @@
 /* USER CODE BEGIN PD */
 
 #define SAMPLES 8192
-#define OUTPUT_SAMPLES 64
+#define OUTPUT_SAMPLES 32
 
 /* USER CODE END PD */
 
@@ -128,7 +128,9 @@ int main(void)
   size_t debugMsgTicks = 100;
   size_t debugMsgTickCnt = 0;
 
-  size_t sampleRatio = 128;	//input sampling/output sampling
+  uint8_t currentHalfFrame = 0;
+
+  size_t sampleRatio = SAMPLES/OUTPUT_SAMPLES;	//input sampling/output sampling
   size_t sampleRatioCnt = 0;
 
   // Tayloe detector
@@ -152,10 +154,10 @@ int main(void)
   float afAbsFiltered = 0.0;
 
 
-  uint16_t dacSample = 0;
+  uint8_t dacSample = 0;
   size_t dacOutIndex = 0;
 
-  uint8_t allSamplesDone = 1;
+//  uint8_t allSamplesDone = 1;
 
   float tayloePhasesFltRatioInv = 1-tayloePhasesFltRatio;
 
@@ -168,18 +170,22 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  HAL_GPIO_WritePin(LD2_GPIO_Port,LD2_Pin,GPIO_PIN_RESET);
-	  if (!allSamplesDone) {
-		  HAL_GPIO_WritePin(LD2_GPIO_Port,LD2_Pin,GPIO_PIN_SET);
-	  }
 
 	  if (dmaInterrupt) {
-     	  allSamplesDone = 0;
 
-		  dacOutIndex = dmaInterrupt == 1 ? 0 : OUTPUT_SAMPLES/2;
-		  uint16_t *rfSample = &rf[dmaInterrupt == 1 ? 0 : SAMPLES/2];
-		  uint16_t *rfSampleEnd = &rf[dmaInterrupt == 1 ? SAMPLES/2 : SAMPLES];
+		  if (currentHalfFrame) {
+			  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+		  }
 
+		  currentHalfFrame = dmaInterrupt;
+		  dmaInterrupt = 0;
+
+		  dacOutIndex = currentHalfFrame == 1 ? 0 : OUTPUT_SAMPLES/2;
+//		  uint16_t *rfSample = &rf[currentHalfFrame == 1 ? 0 : SAMPLES/2];
+//		  uint16_t *rfSampleEnd = &rf[currentHalfFrame == 1 ? SAMPLES/2 : SAMPLES];
+
+		  uint16_t *rfSample = &am_wave[currentHalfFrame == 1 ? 0 : SAMPLES/2];
+		  uint16_t *rfSampleEnd = &am_wave[currentHalfFrame == 1 ? SAMPLES/2 : SAMPLES];
 
 
 		  while (rfSample < rfSampleEnd)
@@ -217,8 +223,8 @@ int main(void)
 				  //do complex absolute value
 				  afAbs = sqrt(pow(tayloeI,2)+pow(tayloeQ,2));
 
-				  afAbs += 2048;	//add dc offset;
-				  afAbs *= 8;		//amplify
+				  afAbs *= 2;		//amplify
+				  afAbs += 128;	//add dc offset;
 
 				  afAbsFiltered *= 0.95;
 				  afAbsFiltered += (afAbs*0.05);
@@ -227,7 +233,11 @@ int main(void)
 
 				  dacOut[dacOutIndex] = dacSample;
 				  dacOutIndex++;
-				  if (dacOutIndex >= OUTPUT_SAMPLES) dacOutIndex = 0;
+//				  if (dacOutIndex >= OUTPUT_SAMPLES) dacOutIndex = 0;
+
+				  //test UART
+				  while(!__HAL_UART_GET_FLAG(&huart3, UART_FLAG_TXE));
+				  huart3.Instance->TDR = dacSample;
 
 				  sampleRatioCnt = 0;
 
@@ -236,19 +246,7 @@ int main(void)
 			  rfSample++;
 		  }
 
-
-		  if (dmaInterrupt==2) debugMsgTickCnt++;
-		  if (debugMsgTickCnt >= debugMsgTicks)
-		  {
-			  snprintf(buf,bufLen,"%d\t%d\t%d\t%d\r\n",(int32_t)tayloeI,(int32_t)tayloeQ,rfSampleMin,rfSampleMax);
-			  HAL_UART_Transmit(&huart3,buf,strlen(buf),100);
-
-			  debugMsgTickCnt = 0;
-			  rfSampleMax = 0;
-		  }
-
-
-		  allSamplesDone = 1;
+		  currentHalfFrame = 0;
 	  }
 
     /* USER CODE END WHILE */
@@ -434,7 +432,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 2047;
+  htim2.Init.Period = 4095;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -509,7 +507,7 @@ static void MX_USART3_UART_Init(void)
 
   /* USER CODE END USART3_Init 1 */
   huart3.Instance = USART3;
-  huart3.Init.BaudRate = 115200;
+  huart3.Init.BaudRate = 460800;
   huart3.Init.WordLength = UART_WORDLENGTH_8B;
   huart3.Init.StopBits = UART_STOPBITS_1;
   huart3.Init.Parity = UART_PARITY_NONE;
