@@ -33,8 +33,15 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define SAMPLES 8192
+#define INPUT_SAMPLES 8192
 #define OUTPUT_SAMPLES 32
+
+#define INPUT_HALF_SAMPLES INPUT_SAMPLES/2
+#define OUTPUT_HALF_SAMPLES OUTPUT_SAMPLES/2
+
+#define IO_SAMPLE_RATIO INPUT_SAMPLES/OUTPUT_SAMPLES
+
+#define TAYLOE_FILTER_RATIO 5	//2^5 = 32
 
 /* USER CODE END PD */
 
@@ -71,13 +78,76 @@ static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 uint16_t dacOut[OUTPUT_SAMPLES] = {0};
+uint16_t rf[INPUT_SAMPLES];
 
-uint16_t rf[SAMPLES];
-volatile uint8_t dmaInterrupt = 0;
+//const uint16_t *rfFrameBegin = rf;
+//const uint16_t *rfFrameHalf = rf+INPUT_HALF_SAMPLES;
+
+uint16_t *rfFrameBegin = am_wave;
+uint16_t *rfFrameHalf = &am_wave[INPUT_HALF_SAMPLES];
+uint16_t *rfFrameEnd = &am_wave[INPUT_SAMPLES];
+
+uint8_t tayloeCurrentSample = 0;
+uint8_t tayloeSamplesPerPhase = 5;	//225 kHz (4.5 MHz sampling / 225 kHz carrier / 4 phases)
+uint32_t tayloePhaseOut[4] = {0};		//filtered phase output
+uint32_t *tayloeCurrentPhaseOut = tayloePhaseOut;
+const uint32_t *tayloeLastPhaseOut = &tayloePhaseOut[3];
+
+size_t dacOutIndex = 0;
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void processHalfFrame(uint16_t *firstSample, uint16_t *lastSample,size_t dacIndex) {
+	uint16_t *sample = firstSample;
+//	uint16_t *lastSample = firstSample+INPUT_HALF_SAMPLES;
+
+	dacOutIndex = dacIndex;
+
+	size_t sampleCnt = 0;
+
+	while (sample < lastSample) {
+		*tayloeCurrentPhaseOut -= (*tayloeCurrentPhaseOut >> TAYLOE_FILTER_RATIO);
+		*tayloeCurrentPhaseOut += *sample;
+
+		tayloeCurrentSample++;
+		if (tayloeCurrentSample >= tayloeSamplesPerPhase) {
+			//phase step forward
+			tayloeCurrentSample = 0;
+			tayloeCurrentPhaseOut++;
+			if (tayloeCurrentPhaseOut > tayloeLastPhaseOut) {
+				//phase rollover
+				tayloeCurrentPhaseOut = tayloePhaseOut;
+			}
+		}
+
+		sampleCnt++;
+		if (sampleCnt >= IO_SAMPLE_RATIO) {
+			sampleCnt = 0;
+			int32_t I = tayloePhaseOut[0] - tayloePhaseOut[2];
+			int32_t Q = tayloePhaseOut[1] - tayloePhaseOut[3];
+
+			I *= I;
+			Q *= Q;
+
+			int32_t IQsquareSum = I+Q;
+
+			float absOut = sqrt(IQsquareSum>>4);
+
+			dacOut[dacOutIndex] = absOut;
+			dacOutIndex++;
+//			if (dacOutIndex >= OUTPUT_SAMPLES) dacOutIndex = 0;
+//			if (dacOutIndex > dacIndex+3) break;
+
+		}
+
+		sample++;
+	}
+//	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+}
+
 
 /* USER CODE END 0 */
 
@@ -121,48 +191,8 @@ int main(void)
   HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)dacOut, OUTPUT_SAMPLES, DAC_ALIGN_12B_R);
   HAL_TIM_Base_Start(&htim2);
 
-  HAL_ADC_Start_DMA(&hadc1,(uint32_t*)rf,SAMPLES);
+  HAL_ADC_Start_DMA(&hadc1,(uint32_t*)rf,INPUT_SAMPLES);
 
-  size_t bufLen = 32;
-  unsigned char buf[bufLen];
-  size_t debugMsgTicks = 100;
-  size_t debugMsgTickCnt = 0;
-
-  uint8_t currentHalfFrame = 0;
-
-  size_t sampleRatio = SAMPLES/OUTPUT_SAMPLES;	//input sampling/output sampling
-  size_t sampleRatioCnt = 0;
-
-  // Tayloe detector
-
-  //fixed for frequency 225 kHz (Polish Radio 1)
-  // 4.5 MHz /(225 kHz * 4) = 20 [sampling freq / (carrier freq * num phases) = num samples per phase
-  uint16_t tayloeSamplesPerPhase = 5;
-  uint16_t tayloeSamplesCnt = 0;
-
-  size_t tayloeCurrentPhase = 0;
-
-  float tayloePhasesFiltered[4] = {0.0, 0.0, 0.0, 0.0};
-
-  float tayloeI = 0.0;
-  float tayloeQ = 0.0;
-
-  float tayloePhasesFltRatio = 0.05;
-
-
-  float afAbs = 0.0;
-  float afAbsFiltered = 0.0;
-
-
-  uint8_t dacSample = 0;
-  size_t dacOutIndex = 0;
-
-//  uint8_t allSamplesDone = 1;
-
-  float tayloePhasesFltRatioInv = 1-tayloePhasesFltRatio;
-
-  uint16_t rfSampleMin = 0xFFFF;
-  uint16_t rfSampleMax = 0;
 
   /* USER CODE END 2 */
 
@@ -170,84 +200,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
-	  if (dmaInterrupt) {
-
-		  if (currentHalfFrame) {
-			  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-		  }
-
-		  currentHalfFrame = dmaInterrupt;
-		  dmaInterrupt = 0;
-
-		  dacOutIndex = currentHalfFrame == 1 ? 0 : OUTPUT_SAMPLES/2;
-//		  uint16_t *rfSample = &rf[currentHalfFrame == 1 ? 0 : SAMPLES/2];
-//		  uint16_t *rfSampleEnd = &rf[currentHalfFrame == 1 ? SAMPLES/2 : SAMPLES];
-
-		  uint16_t *rfSample = &am_wave[currentHalfFrame == 1 ? 0 : SAMPLES/2];
-		  uint16_t *rfSampleEnd = &am_wave[currentHalfFrame == 1 ? SAMPLES/2 : SAMPLES];
-
-
-		  while (rfSample < rfSampleEnd)
-		  {
-			  //test
-			  if (*rfSample < rfSampleMin) rfSampleMin = *rfSample;
-			  if (*rfSample > rfSampleMax) rfSampleMax = *rfSample;
-
-
-			  float currentSample = *rfSample * tayloePhasesFltRatio;
-			  tayloePhasesFiltered[tayloeCurrentPhase] *= tayloePhasesFltRatioInv;
-			  tayloePhasesFiltered[tayloeCurrentPhase] += currentSample;
-
-			  tayloeSamplesCnt++;
-			  if(tayloeSamplesCnt >= tayloeSamplesPerPhase) {
-				  //next phase
-				  tayloeCurrentPhase++;
-				  if (tayloeCurrentPhase >= 4)
-					  tayloeCurrentPhase = 0;
-				  tayloeSamplesCnt = 0;
-			  }
-
-			  //for each 1 output sample
-			  sampleRatioCnt++;
-			  if (sampleRatioCnt >= sampleRatio) {
-
-				  //restart phase counter
-//				  tayloeSamplesCnt = 0;
-//				  tayloeCurrentPhase = 0;
-
-				  //calculate IQ
-				  tayloeI = tayloePhasesFiltered[0]-tayloePhasesFiltered[2];
-				  tayloeQ = tayloePhasesFiltered[1]-tayloePhasesFiltered[3];
-
-				  //do complex absolute value
-				  afAbs = sqrt(pow(tayloeI,2)+pow(tayloeQ,2));
-
-				  afAbs *= 2;		//amplify
-				  afAbs += 128;	//add dc offset;
-
-				  afAbsFiltered *= 0.95;
-				  afAbsFiltered += (afAbs*0.05);
-
-				  dacSample = afAbsFiltered;	//cast to int
-
-				  dacOut[dacOutIndex] = dacSample;
-				  dacOutIndex++;
-//				  if (dacOutIndex >= OUTPUT_SAMPLES) dacOutIndex = 0;
-
-				  //test UART
-				  while(!__HAL_UART_GET_FLAG(&huart3, UART_FLAG_TXE));
-				  huart3.Instance->TDR = dacSample;
-
-				  sampleRatioCnt = 0;
-
-			  }
-
-			  rfSample++;
-		  }
-
-		  currentHalfFrame = 0;
-	  }
 
     /* USER CODE END WHILE */
 
@@ -590,11 +542,13 @@ static void MX_GPIO_Init(void)
 
 // Called when buffer is completely filled
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
-	dmaInterrupt = 1;
+//	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+	processHalfFrame(rfFrameBegin,rfFrameHalf,0);
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-	dmaInterrupt = 2;
+//	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+	processHalfFrame(rfFrameHalf,rfFrameEnd,OUTPUT_HALF_SAMPLES);
 }
 /* USER CODE END 4 */
 
