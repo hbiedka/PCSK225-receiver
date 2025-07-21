@@ -23,6 +23,10 @@
 /* USER CODE BEGIN Includes */
 #include <math.h>
 #include "am_wave.h"
+//#include "LUT.h"
+#include "sin_lut.h"
+#include "cos_lut.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,15 +37,20 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define INPUT_SAMPLES 8192
-#define OUTPUT_SAMPLES 32
+#define INPUT_SAMPLE_ORDER 13
+#define OUTPUT_SAMPLE_ORDER 6
+
+#define INPUT_SAMPLES (1<<INPUT_SAMPLE_ORDER) // 8192
+#define OUTPUT_SAMPLES (1<<OUTPUT_SAMPLE_ORDER) //64
 
 #define INPUT_HALF_SAMPLES INPUT_SAMPLES/2
 #define OUTPUT_HALF_SAMPLES OUTPUT_SAMPLES/2
 
-#define IO_SAMPLE_RATIO INPUT_SAMPLES/OUTPUT_SAMPLES
+#define IO_SAMPLE_RATIO_ORDER (INPUT_SAMPLE_ORDER-OUTPUT_SAMPLE_ORDER)
+#define IO_SAMPLE_RATIO 1<<IO_SAMPLE_RATIO_ORDER
 
-#define TAYLOE_FILTER_RATIO 5	//2^5 = 32
+
+//#define TAYLOE_FILTER_RATIO 5	//2^5 = 32
 
 /* USER CODE END PD */
 
@@ -80,72 +89,84 @@ static void MX_TIM2_Init(void);
 uint16_t dacOut[OUTPUT_SAMPLES] = {0};
 uint16_t rf[INPUT_SAMPLES];
 
-//const uint16_t *rfFrameBegin = rf;
-//const uint16_t *rfFrameHalf = rf+INPUT_HALF_SAMPLES;
-
 uint16_t *rfFrameBegin = am_wave;
 uint16_t *rfFrameHalf = &am_wave[INPUT_HALF_SAMPLES];
 uint16_t *rfFrameEnd = &am_wave[INPUT_SAMPLES];
 
-uint8_t tayloeCurrentSample = 0;
-uint8_t tayloeSamplesPerPhase = 5;	//225 kHz (4.5 MHz sampling / 225 kHz carrier / 4 phases)
-uint32_t tayloePhaseOut[4] = {0};		//filtered phase output
-uint32_t *tayloeCurrentPhaseOut = tayloePhaseOut;
-const uint32_t *tayloeLastPhaseOut = &tayloePhaseOut[3];
 
-size_t dacOutIndex = 0;
+//float dacOutFlt = 0;
+
+size_t LUTperiod = 10;
+size_t lutPos = 0;
+
+const float sqrt_approx_a = -8.3553519533e-12f;
+const float sqrt_approx_b = 3.3562705851e-04f;
+const float sqrt_approx_c = 6.9878899460e+02f;
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void processHalfFrame(uint16_t *firstSample, uint16_t *lastSample,size_t dacIndex) {
+void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample,size_t dacIndex) {
 	uint16_t *sample = firstSample;
-//	uint16_t *lastSample = firstSample+INPUT_HALF_SAMPLES;
 
-	dacOutIndex = dacIndex;
+	size_t sampleRatio = IO_SAMPLE_RATIO;
+	uint16_t *chunkLastSample = sample;
+	size_t dacOutIndex = dacIndex;
 
-	size_t sampleCnt = 0;
+//	uint16_t dbg_sample = 0;
+//	uint16_t dbg_sin_lut = 0;
+//	uint16_t dbg_cos_lut = 0;
 
 	while (sample < lastSample) {
-		*tayloeCurrentPhaseOut -= (*tayloeCurrentPhaseOut >> TAYLOE_FILTER_RATIO);
-		*tayloeCurrentPhaseOut += *sample;
 
-		tayloeCurrentSample++;
-		if (tayloeCurrentSample >= tayloeSamplesPerPhase) {
-			//phase step forward
-			tayloeCurrentSample = 0;
-			tayloeCurrentPhaseOut++;
-			if (tayloeCurrentPhaseOut > tayloeLastPhaseOut) {
-				//phase rollover
-				tayloeCurrentPhaseOut = tayloePhaseOut;
-			}
+		if (lutPos >= sampleRatio) {
+			//move back only for product of period to avoid phase shifts
+			lutPos = lutPos % LUTperiod;
 		}
 
-		sampleCnt++;
-		if (sampleCnt >= IO_SAMPLE_RATIO) {
-			sampleCnt = 0;
-			int32_t I = tayloePhaseOut[0] - tayloePhaseOut[2];
-			int32_t Q = tayloePhaseOut[1] - tayloePhaseOut[3];
+		int32_t Isum = 0;
+		int32_t Qsum = 0;
 
-			I *= I;
-			Q *= Q;
+		chunkLastSample += sampleRatio;
 
-			int32_t IQsquareSum = I+Q;
+		while(sample < chunkLastSample) {
 
-			float absOut = sqrt(IQsquareSum>>4);
+//			dbg_sample = *sample;
+//			dbg_sin_lut = sin_lut[lutPos];
+//			dbg_cos_lut = cos_lut[lutPos];
 
-			dacOut[dacOutIndex] = absOut;
-			dacOutIndex++;
-//			if (dacOutIndex >= OUTPUT_SAMPLES) dacOutIndex = 0;
-//			if (dacOutIndex > dacIndex+3) break;
+			Isum += sin_lut[lutPos] * *sample;
+			Qsum += cos_lut[lutPos] * *sample;
 
+ 			sample++;
+			lutPos++;
 		}
 
-		sample++;
+		// I and Q are now ~262144 (2^18) -> ~2048x 128 (ADC midpoint * num of samples
+		//convert it to ~ 2^10
+		int32_t I = Isum >> 8;
+		int32_t Q = Qsum >> 8;
+
+		// square
+		I *= I;
+		Q *= Q;
+
+		uint32_t IQsquareSum = I+Q;
+
+		//sqrt approximation by quadratic function to make it faster
+		float absOut = sqrt_approx_c;
+		absOut += IQsquareSum*sqrt_approx_b;
+		absOut += (IQsquareSum*IQsquareSum)*sqrt_approx_a;
+
+		//TODO LPF on output?
+		dacOut[dacOutIndex] = absOut;
+
+		dacOutIndex++;
 	}
-//	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+
+
 }
 
 
@@ -200,7 +221,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -279,7 +299,7 @@ static void MX_ADC1_Init(void)
   /** Common config
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
   hadc1.Init.ContinuousConvMode = ENABLE;
@@ -542,12 +562,12 @@ static void MX_GPIO_Init(void)
 
 // Called when buffer is completely filled
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
-//	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 	processHalfFrame(rfFrameBegin,rfFrameHalf,0);
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-//	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 	processHalfFrame(rfFrameHalf,rfFrameEnd,OUTPUT_HALF_SAMPLES);
 }
 /* USER CODE END 4 */
