@@ -38,10 +38,10 @@
 /* USER CODE BEGIN PD */
 
 #define INPUT_SAMPLE_ORDER 13
-#define OUTPUT_SAMPLE_ORDER 6
+#define OUTPUT_SAMPLE_ORDER 7
 
 #define INPUT_SAMPLES (1<<INPUT_SAMPLE_ORDER) // 8192
-#define OUTPUT_SAMPLES (1<<OUTPUT_SAMPLE_ORDER) //64
+#define OUTPUT_SAMPLES (1<<OUTPUT_SAMPLE_ORDER) //128
 
 #define INPUT_HALF_SAMPLES INPUT_SAMPLES/2
 #define OUTPUT_HALF_SAMPLES OUTPUT_SAMPLES/2
@@ -89,12 +89,16 @@ static void MX_TIM2_Init(void);
 uint16_t dacOut[OUTPUT_SAMPLES] = {0};
 uint16_t rf[INPUT_SAMPLES];
 
-uint16_t *rfFrameBegin = am_wave;
-uint16_t *rfFrameHalf = &am_wave[INPUT_HALF_SAMPLES];
-uint16_t *rfFrameEnd = &am_wave[INPUT_SAMPLES];
+//uint16_t *rfFrameBegin = am_wave;
+//uint16_t *rfFrameHalf = &am_wave[INPUT_HALF_SAMPLES];
+//uint16_t *rfFrameEnd = &am_wave[INPUT_SAMPLES];
+
+uint16_t *rfFrameBegin = rf;
+uint16_t *rfFrameHalf = &rf[INPUT_HALF_SAMPLES];
+uint16_t *rfFrameEnd = &rf[INPUT_SAMPLES];
 
 
-//float dacOutFlt = 0;
+float dacOutFlt = 0;
 
 size_t LUTperiod = 10;
 size_t lutPos = 0;
@@ -146,8 +150,8 @@ void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample,size_t dacInd
 
 		// I and Q are now ~262144 (2^18) -> ~2048x 128 (ADC midpoint * num of samples
 		//convert it to ~ 2^10
-		int32_t I = Isum >> 8;
-		int32_t Q = Qsum >> 8;
+		int32_t I = Isum >> 6;
+		int32_t Q = Qsum >> 6;
 
 		// square
 		I *= I;
@@ -161,7 +165,10 @@ void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample,size_t dacInd
 		absOut += (IQsquareSum*IQsquareSum)*sqrt_approx_a;
 
 		//TODO LPF on output?
-		dacOut[dacOutIndex] = absOut;
+		dacOutFlt *=0.9;
+		dacOutFlt += (absOut*0.1);
+		dacOut[dacOutIndex] = dacOutFlt;
+//		dacOut[dacOutIndex] = absOut;
 
 		dacOutIndex++;
 	}
@@ -404,7 +411,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4095;
+  htim2.Init.Period = 2047;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -562,13 +569,15 @@ static void MX_GPIO_Init(void)
 
 // Called when buffer is completely filled
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
-	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 	processHalfFrame(rfFrameBegin,rfFrameHalf,0);
+	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 	processHalfFrame(rfFrameHalf,rfFrameEnd,OUTPUT_HALF_SAMPLES);
+	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 }
 /* USER CODE END 4 */
 
