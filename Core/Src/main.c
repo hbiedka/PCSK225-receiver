@@ -70,6 +70,7 @@ TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
+DMA_HandleTypeDef hdma_usart3_tx;
 
 /* USER CODE BEGIN PV */
 
@@ -105,7 +106,14 @@ size_t lutPos = 0;
 
 const float sqrt_approx_a = -8.3553519533e-12f;
 const float sqrt_approx_b = 3.3562705851e-04f;
-const float sqrt_approx_c = 6.9878899460e+02f;
+//const float sqrt_approx_c = 6.9878899460e+02f;
+const float sqrt_approx_c = 0;
+
+
+uint8_t txData[OUTPUT_HALF_SAMPLES];
+volatile size_t dacIndexReady = 0;
+volatile size_t dacIndexSent = 0;
+
 
 /* USER CODE END PFP */
 
@@ -168,10 +176,12 @@ void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample,size_t dacInd
 		dacOutFlt *=0.9;
 		dacOutFlt += (absOut*0.1);
 		dacOut[dacOutIndex] = dacOutFlt;
-//		dacOut[dacOutIndex] = absOut;
 
 		dacOutIndex++;
 	}
+
+	//for UART sender
+	dacIndexReady = dacIndex;
 
 
 }
@@ -221,6 +231,10 @@ int main(void)
 
   HAL_ADC_Start_DMA(&hadc1,(uint32_t*)rf,INPUT_SAMPLES);
 
+  for(uint8_t i = 0; i < OUTPUT_HALF_SAMPLES; i++)
+  {
+	  txData[i] = 0;
+  }
 
   /* USER CODE END 2 */
 
@@ -231,6 +245,15 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+	  if (dacIndexReady != dacIndexSent) {
+
+		  for (size_t i = 0; i < OUTPUT_HALF_SAMPLES; i++) {
+			  txData[i] = dacOut[dacIndexReady+i]>>2;	//convert 10b to 8b depth
+		  }
+		  HAL_UART_Transmit_DMA(&huart3,txData,OUTPUT_HALF_SAMPLES);
+		  dacIndexSent = dacIndexReady;
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -518,6 +541,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel1_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+  /* DMA1_Channel2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
   /* DMA1_Channel3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
