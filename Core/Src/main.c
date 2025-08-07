@@ -49,9 +49,6 @@
 #define IO_SAMPLE_RATIO_ORDER (INPUT_SAMPLE_ORDER-OUTPUT_SAMPLE_ORDER)
 #define IO_SAMPLE_RATIO 1<<IO_SAMPLE_RATIO_ORDER
 
-
-//#define TAYLOE_FILTER_RATIO 5	//2^5 = 32
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -90,10 +87,6 @@ static void MX_TIM2_Init(void);
 uint16_t dacOut[OUTPUT_SAMPLES] = {0};
 uint16_t rf[INPUT_SAMPLES];
 
-//uint16_t *rfFrameBegin = am_wave;
-//uint16_t *rfFrameHalf = &am_wave[INPUT_HALF_SAMPLES];
-//uint16_t *rfFrameEnd = &am_wave[INPUT_SAMPLES];
-
 uint16_t *rfFrameBegin = rf;
 uint16_t *rfFrameHalf = &rf[INPUT_HALF_SAMPLES];
 uint16_t *rfFrameEnd = &rf[INPUT_SAMPLES];
@@ -125,10 +118,6 @@ void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample,size_t dacInd
 	uint16_t *chunkLastSample = sample;
 	size_t dacOutIndex = dacIndex;
 
-//	uint16_t dbg_sample = 0;
-//	uint16_t dbg_sin_lut = 0;
-//	uint16_t dbg_cos_lut = 0;
-
 	while (sample < lastSample) {
 
 		if (lutPos >= sampleRatio) {
@@ -142,10 +131,6 @@ void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample,size_t dacInd
 		chunkLastSample += sampleRatio;
 
 		while(sample < chunkLastSample) {
-
-//			dbg_sample = *sample;
-//			dbg_sin_lut = sin_lut[lutPos];
-//			dbg_cos_lut = cos_lut[lutPos];
 
 			Isum += sin_lut[lutPos] * *sample;
 			Qsum += cos_lut[lutPos] * *sample;
