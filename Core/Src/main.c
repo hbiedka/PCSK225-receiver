@@ -106,9 +106,7 @@ size_t lutPos = 0;
 
 const float sqrt_approx_a = -8.3553519533e-12f;
 const float sqrt_approx_b = 3.3562705851e-04f;
-//const float sqrt_approx_c = 6.9878899460e+02f;
-const float sqrt_approx_c = 0;
-
+const float sqrt_approx_c = 6.9878899460e+02f;
 
 uint8_t txData[OUTPUT_HALF_SAMPLES];
 volatile size_t dacIndexReady = 0;
@@ -249,7 +247,7 @@ int main(void)
 	  if (dacIndexReady != dacIndexSent) {
 
 		  for (size_t i = 0; i < OUTPUT_HALF_SAMPLES; i++) {
-			  txData[i] = dacOut[dacIndexReady+i]>>2;	//convert 10b to 8b depth
+			  txData[i] = dacOut[dacIndexReady+i]>>4;	//convert 12b to 8b depth
 		  }
 		  HAL_UART_Transmit_DMA(&huart3,txData,OUTPUT_HALF_SAMPLES);
 		  dacIndexSent = dacIndexReady;
@@ -434,7 +432,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 2047;
+  htim2.Init.Period = 1780;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
