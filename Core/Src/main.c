@@ -37,17 +37,20 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define INPUT_SAMPLE_ORDER 13
-#define OUTPUT_SAMPLE_ORDER 7
+//#define INPUT_SAMPLE_ORDER 13
+//#define OUTPUT_SAMPLE_ORDER 7
 
-#define INPUT_SAMPLES (1<<INPUT_SAMPLE_ORDER) // 8192
-#define OUTPUT_SAMPLES (1<<OUTPUT_SAMPLE_ORDER) //128
-
+#define INPUT_SAMPLES 8192
 #define INPUT_HALF_SAMPLES INPUT_SAMPLES/2
+
+#define RF_IF_DECIMATION_RATIO 64
+
+#define IF_SAMPLES 1024
+
+#define OUTPUT_SAMPLES 128
 #define OUTPUT_HALF_SAMPLES OUTPUT_SAMPLES/2
 
-#define IO_SAMPLE_RATIO_ORDER (INPUT_SAMPLE_ORDER-OUTPUT_SAMPLE_ORDER)
-#define IO_SAMPLE_RATIO 1<<IO_SAMPLE_RATIO_ORDER
+#define UART_BUFFER 128
 
 /* USER CODE END PD */
 
@@ -91,32 +94,37 @@ uint16_t *rfFrameBegin = rf;
 uint16_t *rfFrameHalf = &rf[INPUT_HALF_SAMPLES];
 uint16_t *rfFrameEnd = &rf[INPUT_SAMPLES];
 
-
-float dacOutFlt = 0;
-
 size_t LUTperiod = 10;
 size_t lutPos = 0;
+
+//IF I and Q
+int32_t ifI[IF_SAMPLES] = {0};
+int32_t ifQ[IF_SAMPLES] = {0};
+
+volatile size_t ifBufferPushed = 0;
+volatile size_t ifBufferPopped = 0;
 
 const float sqrt_approx_a = -8.3553519533e-12f;
 const float sqrt_approx_b = 3.3562705851e-04f;
 const float sqrt_approx_c = 6.9878899460e+02f;
 
-uint8_t txData[OUTPUT_HALF_SAMPLES];
-volatile size_t dacIndexReady = 0;
-volatile size_t dacIndexSent = 0;
+float dacOutFlt = 0;
+size_t dacOutPushed = 0;
 
+
+uint8_t txData[UART_BUFFER] = {0};
+size_t txDataPushed = 0;
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample,size_t dacIndex) {
+void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample) {
 	uint16_t *sample = firstSample;
 
-	size_t sampleRatio = IO_SAMPLE_RATIO;
+	size_t sampleRatio = RF_IF_DECIMATION_RATIO;
 	uint16_t *chunkLastSample = sample;
-	size_t dacOutIndex = dacIndex;
 
 	while (sample < lastSample) {
 
@@ -144,28 +152,12 @@ void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample,size_t dacInd
 		int32_t I = Isum >> 6;
 		int32_t Q = Qsum >> 6;
 
-		// square
-		I *= I;
-		Q *= Q;
+		ifI[ifBufferPushed] = I;
+		ifQ[ifBufferPushed] = Q;
+		ifBufferPushed++;
+		if(ifBufferPushed >= IF_SAMPLES) ifBufferPushed = 0;
 
-		uint32_t IQsquareSum = I+Q;
-
-		//sqrt approximation by quadratic function to make it faster
-		float absOut = sqrt_approx_c;
-		absOut += IQsquareSum*sqrt_approx_b;
-		absOut += (IQsquareSum*IQsquareSum)*sqrt_approx_a;
-
-		//TODO LPF on output?
-		dacOutFlt *=0.9;
-		dacOutFlt += (absOut*0.1);
-		dacOut[dacOutIndex] = dacOutFlt;
-
-		dacOutIndex++;
 	}
-
-	//for UART sender
-	dacIndexReady = dacIndex;
-
 
 }
 
@@ -214,11 +206,6 @@ int main(void)
 
   HAL_ADC_Start_DMA(&hadc1,(uint32_t*)rf,INPUT_SAMPLES);
 
-  for(uint8_t i = 0; i < OUTPUT_HALF_SAMPLES; i++)
-  {
-	  txData[i] = 0;
-  }
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -228,15 +215,47 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  if (ifBufferPushed != ifBufferPopped) {
 
-	  if (dacIndexReady != dacIndexSent) {
+			int32_t I = ifI[ifBufferPopped];
+			int32_t Q = ifQ[ifBufferPopped];
 
-		  for (size_t i = 0; i < OUTPUT_HALF_SAMPLES; i++) {
-			  txData[i] = dacOut[dacIndexReady+i]>>4;	//convert 12b to 8b depth
-		  }
-		  HAL_UART_Transmit_DMA(&huart3,txData,OUTPUT_HALF_SAMPLES);
-		  dacIndexSent = dacIndexReady;
+			I *= I;
+			Q *= Q;
+
+			uint32_t IQsquareSum = I+Q;
+
+			//sqrt approximation by quadratic function to make it faster
+			float absOut = sqrt_approx_c;
+			absOut += IQsquareSum*sqrt_approx_b;
+			absOut += (IQsquareSum*IQsquareSum)*sqrt_approx_a;
+
+			//simple IIR LPF filter
+			//TODO HPF to remove DC offset?
+
+			dacOutFlt *=0.9;
+			dacOutFlt += (absOut*0.1);
+
+			//push to DAC
+			dacOut[dacOutPushed] = dacOutFlt;
+			dacOutPushed++;
+			if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
+
+			//push to UART
+			txData[txDataPushed] = dacOutFlt /16;
+			txDataPushed++;
+			if (txDataPushed >= UART_BUFFER) {
+				txDataPushed = 0;
+				HAL_UART_Transmit_DMA(&huart3,txData,UART_BUFFER);
+
+			}
+
+			ifBufferPopped++;
+			if (ifBufferPopped >= IF_SAMPLES) ifBufferPopped = 0;
+
+
 	  }
+
   }
   /* USER CODE END 3 */
 }
@@ -417,7 +436,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 1780;
+  htim2.Init.Period = 1791;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -579,13 +598,13 @@ static void MX_GPIO_Init(void)
 // Called when buffer is completely filled
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-	processHalfFrame(rfFrameBegin,rfFrameHalf,0);
+	processHalfFrame(rfFrameBegin,rfFrameHalf);
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-	processHalfFrame(rfFrameHalf,rfFrameEnd,OUTPUT_HALF_SAMPLES);
+	processHalfFrame(rfFrameHalf,rfFrameEnd);
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 }
 /* USER CODE END 4 */
