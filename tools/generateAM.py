@@ -182,13 +182,15 @@ def write_c_header(filename, array_name, samples, array_type="uint16_t"):
 
 if __name__ == "__main__":
     # Parameters
-    sample_rate = 2250000      # Hz
-    carrier_freq = 225000      # Hz
+    sample_rate = 2571429      # Hz
+    carrier_freq = sample_rate/11      # 233766 [Hz]
     modulating_freq = 1099     # Hz
     num_samples = 8192  # Number of samples to generate
     modulation_depth = 0.3
     amplitude = 0.02
     dc_offset = 0.5
+
+    print(f"carrier_freq: {carrier_freq} Hz")
 
     array_name = "am_wave"
     header_filename = "am_wave.h"

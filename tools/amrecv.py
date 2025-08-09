@@ -12,9 +12,8 @@ wav_filename = "output.wav"
 # Parameters
 serial_port = '/dev/ttyUSB0'     # Change this to your serial port
 baudrate = 460800
-# sample_rate = 35156  # Hz
 sample_rate = 40179  # Hz
-duration_sec = 30         # How long to record
+duration_sec = 60         # How long to record
 
 # Open serial
 ser = serial.Serial(serial_port, baudrate, timeout=1)
