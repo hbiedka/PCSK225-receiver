@@ -94,7 +94,7 @@ uint16_t *rfFrameBegin = rf;
 uint16_t *rfFrameHalf = &rf[INPUT_HALF_SAMPLES];
 uint16_t *rfFrameEnd = &rf[INPUT_SAMPLES];
 
-size_t LUTperiod = 10;
+size_t LUTperiod = 11;
 size_t lutPos = 0;
 
 //IF I and Q
