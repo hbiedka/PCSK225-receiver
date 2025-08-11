@@ -23,9 +23,9 @@
 /* USER CODE BEGIN Includes */
 #include <math.h>
 #include "am_wave.h"
-//#include "LUT.h"
 #include "sin_lut.h"
 #include "cos_lut.h"
+#include "af_sin_lut.h"
 
 /* USER CODE END Includes */
 
@@ -147,8 +147,8 @@ void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample) {
 			lutPos++;
 		}
 
-		// I and Q are now ~262144 (2^18) -> ~2048x 128 (ADC midpoint * num of samples
-		//convert it to ~ 2^10
+		// I and Q are now ~(2^17) -> ~2048x64 (ADC midpoint * num of samples
+		//convert it to ~ 2^11
 		int32_t I = Isum >> 6;
 		int32_t Q = Qsum >> 6;
 
@@ -206,6 +206,8 @@ int main(void)
 
   HAL_ADC_Start_DMA(&hadc1,(uint32_t*)rf,INPUT_SAMPLES);
 
+  size_t afLutPos = 0;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -217,8 +219,11 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	  if (ifBufferPushed != ifBufferPopped) {
 
-			int32_t I = ifI[ifBufferPopped];
-			int32_t Q = ifQ[ifBufferPopped];
+			int32_t I = ifI[ifBufferPopped] * af_sin_lut[afLutPos];
+			int32_t Q = ifQ[ifBufferPopped] * af_sin_lut[afLutPos];
+
+			I >>= 8;
+			Q >>= 8;
 
 			I *= I;
 			Q *= Q;
@@ -233,8 +238,8 @@ int main(void)
 			//simple IIR LPF filter
 			//TODO HPF to remove DC offset?
 
-			dacOutFlt *=0.9;
-			dacOutFlt += (absOut*0.1);
+			dacOutFlt *=0.95;
+			dacOutFlt += (absOut*0.05);
 
 			//push to DAC
 			dacOut[dacOutPushed] = dacOutFlt;
@@ -252,6 +257,9 @@ int main(void)
 
 			ifBufferPopped++;
 			if (ifBufferPopped >= IF_SAMPLES) ifBufferPopped = 0;
+
+			afLutPos++;
+			if (afLutPos >= AF_SIN_LUT_SIZE) afLutPos = 0;
 
 
 	  }
