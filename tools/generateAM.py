@@ -117,6 +117,26 @@ def iq_detector(samples, sample_rate, rf_freq, chunk_size=64):
 
     return np.array(I_vals), np.array(Q_vals), np.array(abs_vals), np.array(phase)
 
+def generate_LUT(sample_rate, rf_freq, max_len=1024):
+    sin_lut = np.zeros(max_len)
+
+    for i in range(max_len):
+        sin_lut[i] = np.sin(2 * np.pi * rf_freq * i / sample_rate)
+
+    # find the best fit length
+    i = math.floor(sample_rate / rf_freq)
+    best_fit_len = i
+
+    while i < max_len:
+        if abs(sin_lut[i]) < abs(sin_lut[best_fit_len]):
+            best_fit_len = i
+        i += 1
+
+    print(f"Best fit length: {best_fit_len} with value {sin_lut[best_fit_len]}")
+    sin_lut = sin_lut[:best_fit_len]
+
+    return sin_lut
+
 def simple_detector(samples, sample_rate, rf_freq):
 
     rf_signal = samples
@@ -133,9 +153,11 @@ def simple_detector(samples, sample_rate, rf_freq):
 
     sin_lut = np.zeros(len(rf_signal))
 
-    for i in range(len(rf_signal)):
-        sin_lut[i] = 128 * np.sin(2 * np.pi * rf_freq * i / sample_rate)
 
+    # for i in range(len(rf_signal)):
+    #     sin_lut[i] = 128 * np.sin(2 * np.pi * rf_freq * i / sample_rate)
+
+    sin_lut = 128*generate_LUT(sample_rate, rf_freq)
     sin_lut = sin_lut.astype(np.int32)
         
     #write LUTs to header file
@@ -143,12 +165,16 @@ def simple_detector(samples, sample_rate, rf_freq):
 
     # Emulate mixing
     i = 0
+    lut_pos = 0
     # Process the entire signal
     while i < len(rf_signal):
 
         # Mixing with LUTs
-        I = rf_signal[i] * sin_lut[i]
+        I = rf_signal[i] * sin_lut[lut_pos]
         i += 1
+        lut_pos += 1
+        if lut_pos >= len(sin_lut):
+            lut_pos = 0
         
         I_vals.append(I)
 
@@ -228,13 +254,21 @@ if __name__ == "__main__":
 
     I_vals, Q_vals, abs_vals, phase = iq_detector(am_wave*4096, sample_rate, if_freq, chunk_size=chunk_size)
 
-    #calculate residual frequency
-    residual_freq = if_freq -  carrier_freq
-    print(f"Residual frequency: {residual_freq} Hz")
-
     #calculate new sample rate
     if_sample_rate = sample_rate / chunk_size
     print(f"IF sample rate: {if_sample_rate} Hz")
+    
+    #calculate residual frequency
+    residual_freq = if_freq - carrier_freq
+    print(f"Residual frequency: {residual_freq} Hz")
+    
+    # samples_per_if_cycle = math.floor(if_sample_rate / residual_freq)
+    # real_residual_freq = if_sample_rate / samples_per_if_cycle
+    # print(f"Real residual frequency: {real_residual_freq} Hz")
+
+    # print(f"Real demodulated frequency: {if_freq-real_residual_freq} Hz")
+
+    
 
     af_i = simple_detector(I_vals, if_sample_rate, residual_freq)
     af_q = simple_detector(Q_vals, if_sample_rate, residual_freq)
