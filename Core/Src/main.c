@@ -148,9 +148,9 @@ void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample) {
 		}
 
 		// I and Q are now ~(2^17) -> ~2048x64 (ADC midpoint * num of samples
-		//convert it to ~ 2^11
-		int32_t I = Isum >> 6;
-		int32_t Q = Qsum >> 6;
+		//convert it to ~ 2^9
+		int32_t I = Isum >> 8;
+		int32_t Q = Qsum >> 8;
 
 		ifI[ifBufferPushed] = I;
 		ifQ[ifBufferPushed] = Q;
@@ -218,6 +218,14 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	  if (ifBufferPushed != ifBufferPopped) {
+		  	//we need to do a phase shift of Q by 90 degrees.
+		  	// for 8766 Hz it is 1.14 (~1) samoles
+
+		    int32_t ifBufferPhaseShift = ifBufferPopped-1;
+		    if (ifBufferPhaseShift < 0) {
+		    	ifBufferPhaseShift += IF_SAMPLES;
+		    }
+		  	int32_t ssb = ifI[ifBufferPopped] + ifQ[(size_t)ifBufferPhaseShift];
 
 			int32_t I = ifI[ifBufferPopped] * af_sin_lut[afLutPos];
 			int32_t Q = ifQ[ifBufferPopped] * af_sin_lut[afLutPos];
@@ -247,7 +255,8 @@ int main(void)
 			if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
 			//push to UART
-			txData[txDataPushed] = dacOutFlt /16;
+//			txData[txDataPushed] = dacOutFlt /16;
+			txData[txDataPushed] = (ssb/64)+128;
 			txDataPushed++;
 			if (txDataPushed >= UART_BUFFER) {
 				txDataPushed = 0;
