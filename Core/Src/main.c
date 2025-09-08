@@ -101,6 +101,11 @@ size_t lutPos = 0;
 int32_t ifI[IF_SAMPLES] = {0};
 int32_t ifQ[IF_SAMPLES] = {0};
 
+//AF I and Q
+//int32_t afI[IF_SAMPLES] = {0};
+int32_t afQ[IF_SAMPLES] = {0};
+
+
 volatile size_t ifBufferPushed = 0;
 volatile size_t ifBufferPopped = 0;
 
@@ -218,20 +223,24 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	  if (ifBufferPushed != ifBufferPopped) {
-		  	//we need to do a phase shift of Q by 90 degrees.
-		  	// for 8766 Hz it is 1.14 (~1) samoles
-
-		    int32_t ifBufferPhaseShift = ifBufferPopped-1;
-		    if (ifBufferPhaseShift < 0) {
-		    	ifBufferPhaseShift += IF_SAMPLES;
-		    }
-		  	int32_t ssb = ifI[ifBufferPopped] + ifQ[(size_t)ifBufferPhaseShift];
 
 			int32_t I = ifI[ifBufferPopped] * af_sin_lut[afLutPos];
 			int32_t Q = ifQ[ifBufferPopped] * af_sin_lut[afLutPos];
 
 			I >>= 8;
 			Q >>= 8;
+
+//			afI[ifBufferPopped] = I;
+			afQ[ifBufferPopped] = Q;
+
+			//SSB
+			//period for 1kHz is 40178 / 1000 => ~40 samples
+			//90 deg phase shift is ~40/4 => ~10 samples
+			int32_t QPhaseShift = ifBufferPopped - 10;
+			if (QPhaseShift < 0) {
+				QPhaseShift += IF_SAMPLES;
+			}
+			int32_t ssb = I - afQ[QPhaseShift];
 
 			I *= I;
 			Q *= Q;
