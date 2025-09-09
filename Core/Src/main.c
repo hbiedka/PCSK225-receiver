@@ -22,10 +22,13 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <math.h>
-#include "am_wave.h"
-#include "sin_lut.h"
-#include "cos_lut.h"
+//#include "am_wave.h"
+//#include "sin_lut.h"
+//#include "cos_lut.h"
 #include "af_sin_lut.h"
+
+#include "iq.h"
+#include "mixers/ifMix.h"
 
 /* USER CODE END Includes */
 
@@ -95,19 +98,14 @@ uint16_t *rfFrameHalf = &rf[INPUT_HALF_SAMPLES];
 uint16_t *rfFrameEnd = &rf[INPUT_SAMPLES];
 
 size_t LUTperiod = 11;
-size_t lutPos = 0;
 
-//IF I and Q
-int32_t ifI[IF_SAMPLES] = {0};
-int32_t ifQ[IF_SAMPLES] = {0};
+struct IQ if_IQ[IF_SAMPLES];
+size_t ifBufferPush = 0;
+size_t ifBufferPop = 0;
 
 //AF I and Q
 //int32_t afI[IF_SAMPLES] = {0};
 int32_t afQ[IF_SAMPLES] = {0};
-
-
-volatile size_t ifBufferPushed = 0;
-volatile size_t ifBufferPopped = 0;
 
 const float sqrt_approx_a = -8.3553519533e-12f;
 const float sqrt_approx_b = 3.3562705851e-04f;
@@ -124,48 +122,6 @@ size_t txDataPushed = 0;
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-void  processHalfFrame(uint16_t *firstSample, uint16_t *lastSample) {
-	uint16_t *sample = firstSample;
-
-	size_t sampleRatio = RF_IF_DECIMATION_RATIO;
-	uint16_t *chunkLastSample = sample;
-
-	while (sample < lastSample) {
-
-		if (lutPos >= sampleRatio) {
-			//move back only for product of period to avoid phase shifts
-			lutPos = lutPos % LUTperiod;
-		}
-
-		int32_t Isum = 0;
-		int32_t Qsum = 0;
-
-		chunkLastSample += sampleRatio;
-
-		while(sample < chunkLastSample) {
-
-			Isum += sin_lut[lutPos] * *sample;
-			Qsum += cos_lut[lutPos] * *sample;
-
- 			sample++;
-			lutPos++;
-		}
-
-		// I and Q are now ~(2^17) -> ~2048x64 (ADC midpoint * num of samples
-		//convert it to ~ 2^9
-		int32_t I = Isum >> 8;
-		int32_t Q = Qsum >> 8;
-
-		ifI[ifBufferPushed] = I;
-		ifQ[ifBufferPushed] = Q;
-		ifBufferPushed++;
-		if(ifBufferPushed >= IF_SAMPLES) ifBufferPushed = 0;
-
-	}
-
-}
-
 
 /* USER CODE END 0 */
 
@@ -211,6 +167,9 @@ int main(void)
 
   HAL_ADC_Start_DMA(&hadc1,(uint32_t*)rf,INPUT_SAMPLES);
 
+  //init RF to IF mixer
+  ifMix_init(if_IQ,IF_SAMPLES,RF_IF_DECIMATION_RATIO,LUTperiod);
+
   size_t afLutPos = 0;
 
   /* USER CODE END 2 */
@@ -222,21 +181,23 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  if (ifBufferPushed != ifBufferPopped) {
 
-			int32_t I = ifI[ifBufferPopped] * af_sin_lut[afLutPos];
-			int32_t Q = ifQ[ifBufferPopped] * af_sin_lut[afLutPos];
+	  ifBufferPush = ifMix_getOutputBufferPos();
+
+	  if (ifBufferPush != ifBufferPop) {
+
+			int32_t I = if_IQ[ifBufferPop].i * af_sin_lut[afLutPos];
+			int32_t Q = if_IQ[ifBufferPop].q * af_sin_lut[afLutPos];
 
 			I >>= 8;
 			Q >>= 8;
 
-//			afI[ifBufferPopped] = I;
-			afQ[ifBufferPopped] = Q;
+			afQ[ifBufferPop] = Q;
 
 			//SSB
 			//period for 1kHz is 40178 / 1000 => ~40 samples
 			//90 deg phase shift is ~40/4 => ~10 samples
-			int32_t QPhaseShift = ifBufferPopped - 10;
+			int32_t QPhaseShift = ifBufferPop - 10;
 			if (QPhaseShift < 0) {
 				QPhaseShift += IF_SAMPLES;
 			}
@@ -273,8 +234,8 @@ int main(void)
 
 			}
 
-			ifBufferPopped++;
-			if (ifBufferPopped >= IF_SAMPLES) ifBufferPopped = 0;
+			ifBufferPop++;
+			if (ifBufferPop >= IF_SAMPLES) ifBufferPop = 0;
 
 			afLutPos++;
 			if (afLutPos >= AF_SIN_LUT_SIZE) afLutPos = 0;
@@ -624,13 +585,15 @@ static void MX_GPIO_Init(void)
 // Called when buffer is completely filled
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-	processHalfFrame(rfFrameBegin,rfFrameHalf);
+//	processHalfFrame(rfFrameBegin,rfFrameHalf);
+	ifMix_Mix(rfFrameBegin, rfFrameHalf);
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-	processHalfFrame(rfFrameHalf,rfFrameEnd);
+//	processHalfFrame(rfFrameHalf,rfFrameEnd);
+	ifMix_Mix(rfFrameHalf,rfFrameEnd);
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 }
 /* USER CODE END 4 */
