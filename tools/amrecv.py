@@ -60,6 +60,9 @@ ser.close()
 # Convert to float [-1, 1] for WAV file
 audio_float = (samples.astype(np.float32) - 128) / 128.0
 
+#save to csv
+np.savetxt("output.csv", audio_float, delimiter=",")
+
 # Save to WAV
 sf.write(wav_filename, audio_float, samplerate=sample_rate)
 

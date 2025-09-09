@@ -238,12 +238,22 @@ if __name__ == "__main__":
         num_samples, modulation_depth, amplitude, dc_offset
     )
 
+    #add white noise
+    noise = np.random.normal(0, 0.1, num_samples)
+    am_wave += noise
+    # am_wave = np.clip(am_wave, 0, 1)
+
     #4600 is close to 55 bps
     am_wave = dpsk(am_wave, 46000, dc_offset=dc_offset)
 
     # Write header
     write_c_header(header_filename, array_name, samples)
     print(f"Header file '{header_filename}' generated with array '{array_name}'.")
+
+
+    # turning off to 224 kHz to move carrier to 1 kHz
+    tuneoff = 1000
+    carrier_freq -= tuneoff  # Hz
 
     # Demodulate to IF
     if_freq = sample_rate / math.floor(sample_rate / carrier_freq)
@@ -285,6 +295,25 @@ if __name__ == "__main__":
     #filter audio envelope
     for i in range(1, len(af_abs_vals)):
         af_abs_vals[i] = af_abs_vals[i-1] * 0.9 + af_abs_vals[i] * 0.1
+
+    # ssb demodulation
+    ssb = list()
+
+    #calculate Hilbert phase shift
+    hilbert_shift = math.floor(if_sample_rate / tuneoff / 4)
+    print(f"Hilbert shift: {hilbert_shift} samples")
+
+    for i in range(hilbert_shift,len(af_abs_vals)):
+        ssb.append(af_i[i]-af_q[i-hilbert_shift])
+
+    plt.figure(figsize=(10, 3))
+    plt.plot(ssb, label="SSB Demodulated Signal", color="green",
+                alpha=0.7)
+    plt.title("SSB Demodulated Signal")
+    plt.xlabel("Sample index")
+    plt.ylabel("Amplitude (relative)")
+    plt.grid(True)
+    plt.legend()
 
     fig = plt.figure(figsize=(12, 10))
     gs = fig.add_gridspec(4, 2, height_ratios=[1, 1, 1, 1])
