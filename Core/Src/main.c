@@ -22,9 +22,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <math.h>
-//#include "am_wave.h"
-//#include "sin_lut.h"
-//#include "cos_lut.h"
+
+#include "sin_lut.h"
+#include "cos_lut.h"
 #include "af_sin_lut.h"
 
 #include "iq.h"
@@ -48,7 +48,8 @@
 
 #define RF_IF_DECIMATION_RATIO 64
 
-#define IF_SAMPLES 1024
+#define IF_SAMPLES 128	//INPUT_SAMPLES/DECIMATION_RATIO
+#define IF_HALF_SAMPLES IF_SAMPLES/2
 
 #define OUTPUT_SAMPLES 128
 #define OUTPUT_HALF_SAMPLES OUTPUT_SAMPLES/2
@@ -97,10 +98,13 @@ uint16_t *rfFrameBegin = rf;
 uint16_t *rfFrameHalf = &rf[INPUT_HALF_SAMPLES];
 uint16_t *rfFrameEnd = &rf[INPUT_SAMPLES];
 
-size_t LUTperiod = 11;
+uint32_t LUTperiod = 11;
 
 struct IQ if_IQ[IF_SAMPLES];
-size_t ifBufferPush = 0;
+struct IQ *ifFrameBegin = if_IQ;
+struct IQ *ifFrameHalf = &if_IQ[IF_HALF_SAMPLES];
+
+volatile size_t ifBufferPush = 0;
 size_t ifBufferPop = 0;
 
 //AF I and Q
@@ -168,8 +172,7 @@ int main(void)
   HAL_ADC_Start_DMA(&hadc1,(uint32_t*)rf,INPUT_SAMPLES);
 
   //init RF to IF mixer
-  ifMix_init(if_IQ,IF_SAMPLES,RF_IF_DECIMATION_RATIO,LUTperiod);
-
+  ifMix_init(sin_lut,cos_lut,&LUTperiod,RF_IF_DECIMATION_RATIO);
   size_t afLutPos = 0;
 
   /* USER CODE END 2 */
@@ -181,8 +184,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
-	  ifBufferPush = ifMix_getOutputBufferPos();
 
 	  if (ifBufferPush != ifBufferPop) {
 
@@ -585,15 +586,15 @@ static void MX_GPIO_Init(void)
 // Called when buffer is completely filled
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-//	processHalfFrame(rfFrameBegin,rfFrameHalf);
-	ifMix_Mix(rfFrameBegin, rfFrameHalf);
+	ifMix_Mix(rfFrameBegin, rfFrameHalf,ifFrameBegin);
+	ifBufferPush = IF_HALF_SAMPLES;
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-//	processHalfFrame(rfFrameHalf,rfFrameEnd);
-	ifMix_Mix(rfFrameHalf,rfFrameEnd);
+	ifMix_Mix(rfFrameHalf,rfFrameEnd,ifFrameHalf);
+	ifBufferPush = 0;
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 }
 /* USER CODE END 4 */

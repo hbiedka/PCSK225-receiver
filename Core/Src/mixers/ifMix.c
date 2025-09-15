@@ -5,41 +5,35 @@
  *      Author: hubert
  */
 #include "ifMix.h"
-#include "sin_lut.h"
-#include "cos_lut.h"
 
 size_t lutPos;
-size_t lutPeriod;
 size_t sampleRatio;
 
-static struct IQ *if_IQ;
-size_t ifLen;
-volatile size_t ifIndex;
+int32_t *iLUT;
+int32_t *qLUT;
+uint32_t *lutPeriod;
 
-void ifMix_init(struct IQ *ifSamples, size_t ifSamplesLen, uint32_t ratio, uint32_t period) {
+void ifMix_init(int32_t *i_lut,int32_t *q_lut, uint32_t *period, uint32_t ratio) {
 	lutPos = 0;
 	lutPeriod = period;
 	sampleRatio = ratio;
 
-	if_IQ = ifSamples;
-	ifLen = ifSamplesLen;
-	ifIndex = 0;
+	iLUT = i_lut;
+	qLUT = q_lut;
+
 }
 
-size_t ifMix_getOutputBufferPos() {
-	return ifIndex;
-}
-
-void ifMix_Mix(uint16_t *inputBegin, uint16_t *inputEnd)
+void ifMix_Mix(uint16_t *inputBegin, uint16_t *inputEnd, struct IQ *outputBegin)
 {
 	uint16_t *sample = inputBegin;
 	uint16_t *chunkLastSample = sample;
+	struct IQ *outSample = outputBegin;
 
 	while (sample < inputEnd) {
 
 		if (lutPos >= sampleRatio) {
 			//move back only for product of period to avoid phase shifts
-			lutPos = lutPos % lutPeriod;
+			lutPos = lutPos % *lutPeriod;
 		}
 
 		int32_t Isum = 0;
@@ -49,8 +43,8 @@ void ifMix_Mix(uint16_t *inputBegin, uint16_t *inputEnd)
 
 		while(sample < chunkLastSample) {
 
-			Isum += sin_lut[lutPos] * *sample;
-			Qsum += cos_lut[lutPos] * *sample;
+			Isum += iLUT[lutPos] * *sample;
+			Qsum += qLUT[lutPos] * *sample;
 
  			sample++;
 			lutPos++;
@@ -58,11 +52,9 @@ void ifMix_Mix(uint16_t *inputBegin, uint16_t *inputEnd)
 
 		// I and Q are now ~(2^17) -> ~2048x64 (ADC midpoint * num of samples
 		//convert it to ~ 2^9
-		if_IQ[ifIndex].i = Isum >> 8;
-		if_IQ[ifIndex].q = Qsum >> 8;
-
-		ifIndex++;
-		if(ifIndex >= ifLen) ifIndex = 0;
+		outSample->i = Isum >> 8;
+		outSample->q = Qsum >> 8;
+		outSample++;
 
 	}
 
