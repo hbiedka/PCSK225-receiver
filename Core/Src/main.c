@@ -108,8 +108,7 @@ volatile size_t ifBufferPush = 0;
 size_t ifBufferPop = 0;
 
 //AF I and Q
-//int32_t afI[IF_SAMPLES] = {0};
-int32_t afQ[IF_SAMPLES] = {0};
+struct IQ af_IQ[IF_SAMPLES];
 
 const float sqrt_approx_a = -8.3553519533e-12f;
 const float sqrt_approx_b = 3.3562705851e-04f;
@@ -187,13 +186,18 @@ int main(void)
 
 	  if (ifBufferPush != ifBufferPop) {
 
+		  	// RF to IF mixing
 			int32_t I = if_IQ[ifBufferPop].i * af_sin_lut[afLutPos];
 			int32_t Q = if_IQ[ifBufferPop].q * af_sin_lut[afLutPos];
 
 			I >>= 8;
 			Q >>= 8;
 
-			afQ[ifBufferPop] = Q;
+			af_IQ[ifBufferPop].i = I;
+			af_IQ[ifBufferPop].q = Q;
+
+			afLutPos++;
+			if (afLutPos >= AF_SIN_LUT_SIZE) afLutPos = 0;
 
 			//SSB
 			//period for 1kHz is 40178 / 1000 => ~40 samples
@@ -202,8 +206,9 @@ int main(void)
 			if (QPhaseShift < 0) {
 				QPhaseShift += IF_SAMPLES;
 			}
-			int32_t ssb = I - afQ[QPhaseShift];
+			int32_t ssb = af_IQ[ifBufferPop].i - af_IQ[QPhaseShift].q;
 
+			// AM detection
 			I *= I;
 			Q *= Q;
 
@@ -237,9 +242,6 @@ int main(void)
 
 			ifBufferPop++;
 			if (ifBufferPop >= IF_SAMPLES) ifBufferPop = 0;
-
-			afLutPos++;
-			if (afLutPos >= AF_SIN_LUT_SIZE) afLutPos = 0;
 
 
 	  }
