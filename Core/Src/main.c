@@ -104,11 +104,12 @@ struct IQ if_IQ[IF_SAMPLES];
 struct IQ *ifFrameBegin = if_IQ;
 struct IQ *ifFrameHalf = &if_IQ[IF_HALF_SAMPLES];
 
-volatile size_t ifBufferPush = 0;
-size_t ifBufferPop = 0;
+volatile size_t ifBufferLastUpdate = 0xFFFFFFFF;
+size_t ifBufferPrevUpdate = 0xFFFFFFFF;
 
 //AF I and Q
 struct IQ af_IQ[IF_SAMPLES];
+size_t afBufferLastUpdate = 0;
 
 const float sqrt_approx_a = -8.3553519533e-12f;
 const float sqrt_approx_b = 3.3562705851e-04f;
@@ -184,31 +185,42 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-	  if (ifBufferPush != ifBufferPop) {
+	  if (ifBufferLastUpdate != 0xFFFFFFFF && ifBufferLastUpdate != ifBufferPrevUpdate) {
+		  size_t afBuf1 = afBufferLastUpdate;
 
-		  	// RF to IF mixing
-			int32_t I = if_IQ[ifBufferPop].i * af_sin_lut[afLutPos];
-			int32_t Q = if_IQ[ifBufferPop].q * af_sin_lut[afLutPos];
+		  //IF->AF mix loop
+		  for(size_t ifBuf = ifBufferLastUpdate; ifBuf < ifBufferLastUpdate+IF_HALF_SAMPLES; ifBuf++) {
+
+			// RF to IF mixing
+			int32_t I = if_IQ[ifBuf].i * af_sin_lut[afLutPos];
+			int32_t Q = if_IQ[ifBuf].q * af_sin_lut[afLutPos];
 
 			I >>= 8;
 			Q >>= 8;
 
-			af_IQ[ifBufferPop].i = I;
-			af_IQ[ifBufferPop].q = Q;
+			af_IQ[afBuf1].i = I;
+			af_IQ[afBuf1].q = Q;
+			afBuf1++;
 
 			afLutPos++;
 			if (afLutPos >= AF_SIN_LUT_SIZE) afLutPos = 0;
+		  }
+
+		  // SSB/AM detector loop
+		  for (size_t afBuf = afBufferLastUpdate; afBuf < afBufferLastUpdate + IF_HALF_SAMPLES; afBuf++) {
 
 			//SSB
 			//period for 1kHz is 40178 / 1000 => ~40 samples
 			//90 deg phase shift is ~40/4 => ~10 samples
-			int32_t QPhaseShift = ifBufferPop - 10;
+			int32_t QPhaseShift = afBuf - 10;
 			if (QPhaseShift < 0) {
 				QPhaseShift += IF_SAMPLES;
 			}
-			int32_t ssb = af_IQ[ifBufferPop].i - af_IQ[QPhaseShift].q;
+			int32_t ssb = af_IQ[afBuf].i - af_IQ[QPhaseShift].q;
 
 			// AM detection
+			int32_t I = af_IQ[afBuf].i;
+			int32_t Q = af_IQ[afBuf].q;
 			I *= I;
 			Q *= Q;
 
@@ -230,8 +242,7 @@ int main(void)
 			dacOutPushed++;
 			if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
-			//push to UART
-//			txData[txDataPushed] = dacOutFlt /16;
+			//push to SSB to UART
 			txData[txDataPushed] = (ssb/64)+128;
 			txDataPushed++;
 			if (txDataPushed >= UART_BUFFER) {
@@ -240,9 +251,14 @@ int main(void)
 
 			}
 
-			ifBufferPop++;
-			if (ifBufferPop >= IF_SAMPLES) ifBufferPop = 0;
+		  }
 
+		  //AF buffer hop and rollover
+		  afBufferLastUpdate+= IF_HALF_SAMPLES;
+		  if(afBufferLastUpdate >= IF_SAMPLES) afBufferLastUpdate = 0;
+
+		  //IF buffer swap to wait from next update from ISR
+		  ifBufferPrevUpdate = ifBufferLastUpdate;
 
 	  }
 
@@ -589,14 +605,14 @@ static void MX_GPIO_Init(void)
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 	ifMix_Mix(rfFrameBegin, rfFrameHalf,ifFrameBegin);
-	ifBufferPush = IF_HALF_SAMPLES;
+	ifBufferLastUpdate = 0;
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 	ifMix_Mix(rfFrameHalf,rfFrameEnd,ifFrameHalf);
-	ifBufferPush = 0;
+	ifBufferLastUpdate = IF_HALF_SAMPLES;
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 }
 /* USER CODE END 4 */
