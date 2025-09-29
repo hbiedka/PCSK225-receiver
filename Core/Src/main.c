@@ -29,6 +29,7 @@
 
 #include "iq.h"
 #include "mixers/ifMix.h"
+#include "mixers/afMix.h"
 
 /* USER CODE END Includes */
 
@@ -107,6 +108,8 @@ struct IQ *ifFrameHalf = &if_IQ[IF_HALF_SAMPLES];
 volatile size_t ifBufferLastUpdate = 0xFFFFFFFF;
 size_t ifBufferPrevUpdate = 0xFFFFFFFF;
 
+size_t afLUTperiod = AF_SIN_LUT_SIZE;
+
 //AF I and Q
 struct IQ af_IQ[IF_SAMPLES];
 size_t afBufferLastUpdate = 0;
@@ -173,7 +176,7 @@ int main(void)
 
   //init RF to IF mixer
   ifMix_init(sin_lut,cos_lut,&LUTperiod,RF_IF_DECIMATION_RATIO);
-  size_t afLutPos = 0;
+  afMix_init(af_sin_lut,&afLUTperiod);
 
   /* USER CODE END 2 */
 
@@ -186,25 +189,9 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
 	  if (ifBufferLastUpdate != 0xFFFFFFFF && ifBufferLastUpdate != ifBufferPrevUpdate) {
-		  size_t afBuf1 = afBufferLastUpdate;
 
-		  //IF->AF mix loop
-		  for(size_t ifBuf = ifBufferLastUpdate; ifBuf < ifBufferLastUpdate+IF_HALF_SAMPLES; ifBuf++) {
-
-			// RF to IF mixing
-			int32_t I = if_IQ[ifBuf].i * af_sin_lut[afLutPos];
-			int32_t Q = if_IQ[ifBuf].q * af_sin_lut[afLutPos];
-
-			I >>= 8;
-			Q >>= 8;
-
-			af_IQ[afBuf1].i = I;
-			af_IQ[afBuf1].q = Q;
-			afBuf1++;
-
-			afLutPos++;
-			if (afLutPos >= AF_SIN_LUT_SIZE) afLutPos = 0;
-		  }
+		  //IF->AF mix
+		  afMix_mix(&if_IQ[ifBufferLastUpdate],&if_IQ[ifBufferLastUpdate+IF_HALF_SAMPLES],&af_IQ[afBufferLastUpdate]);
 
 		  // SSB/AM detector loop
 		  for (size_t afBuf = afBufferLastUpdate; afBuf < afBufferLastUpdate + IF_HALF_SAMPLES; afBuf++) {
