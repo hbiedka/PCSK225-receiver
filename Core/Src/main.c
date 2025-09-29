@@ -112,7 +112,11 @@ size_t afLUTperiod = AF_SIN_LUT_SIZE;
 
 //AF I and Q
 struct IQ af_IQ[IF_SAMPLES];
-size_t afBufferLastUpdate = 0;
+struct IQ *afFrameBegin = af_IQ;
+struct IQ *afFrameEnd = &af_IQ[IF_SAMPLES];
+
+struct IQ *afCurrentFrame = af_IQ;
+
 
 const float sqrt_approx_a = -8.3553519533e-12f;
 const float sqrt_approx_b = 3.3562705851e-04f;
@@ -191,23 +195,23 @@ int main(void)
 	  if (ifBufferLastUpdate != 0xFFFFFFFF && ifBufferLastUpdate != ifBufferPrevUpdate) {
 
 		  //IF->AF mix
-		  afMix_mix(&if_IQ[ifBufferLastUpdate],&if_IQ[ifBufferLastUpdate+IF_HALF_SAMPLES],&af_IQ[afBufferLastUpdate]);
+		  afMix_mix(&if_IQ[ifBufferLastUpdate],&if_IQ[ifBufferLastUpdate+IF_HALF_SAMPLES],afCurrentFrame);
 
 		  // SSB/AM detector loop
-		  for (size_t afBuf = afBufferLastUpdate; afBuf < afBufferLastUpdate + IF_HALF_SAMPLES; afBuf++) {
+		  for (struct IQ *sample = afCurrentFrame; sample < afCurrentFrame + IF_HALF_SAMPLES; sample++) {
 
 			//SSB
 			//period for 1kHz is 40178 / 1000 => ~40 samples
 			//90 deg phase shift is ~40/4 => ~10 samples
-			int32_t QPhaseShift = afBuf - 10;
-			if (QPhaseShift < 0) {
-				QPhaseShift += IF_SAMPLES;
+			struct IQ *sampleShifted = sample - 10;
+			if (sampleShifted < afFrameBegin) {
+				sampleShifted += IF_SAMPLES;
 			}
-			int32_t ssb = af_IQ[afBuf].i - af_IQ[QPhaseShift].q;
+			int32_t ssb = sample->i - sampleShifted->q;
 
 			// AM detection
-			int32_t I = af_IQ[afBuf].i;
-			int32_t Q = af_IQ[afBuf].q;
+			int32_t I = sample->i;
+			int32_t Q = sample->q;
 			I *= I;
 			Q *= Q;
 
@@ -241,8 +245,8 @@ int main(void)
 		  }
 
 		  //AF buffer hop and rollover
-		  afBufferLastUpdate+= IF_HALF_SAMPLES;
-		  if(afBufferLastUpdate >= IF_SAMPLES) afBufferLastUpdate = 0;
+		  afCurrentFrame += IF_HALF_SAMPLES;
+		  if(afCurrentFrame >= afFrameEnd) afCurrentFrame = afFrameBegin;
 
 		  //IF buffer swap to wait from next update from ISR
 		  ifBufferPrevUpdate = ifBufferLastUpdate;
