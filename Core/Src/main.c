@@ -30,6 +30,8 @@
 #include "iq.h"
 #include "mixers/ifMix.h"
 #include "mixers/afMix.h"
+#include "detectors/am.h"
+#include "detectors/sfssb.h"
 
 /* USER CODE END Includes */
 
@@ -117,12 +119,6 @@ struct IQ *afFrameEnd = &af_IQ[IF_SAMPLES];
 
 struct IQ *afCurrentFrame = af_IQ;
 
-
-const float sqrt_approx_a = -8.3553519533e-12f;
-const float sqrt_approx_b = 3.3562705851e-04f;
-const float sqrt_approx_c = 6.9878899460e+02f;
-
-float dacOutFlt = 0;
 size_t dacOutPushed = 0;
 
 
@@ -144,6 +140,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  int32_t am[IF_HALF_SAMPLES];
+  int32_t ssb[IF_HALF_SAMPLES];
 
   /* USER CODE END 1 */
 
@@ -178,9 +176,13 @@ int main(void)
 
   HAL_ADC_Start_DMA(&hadc1,(uint32_t*)rf,INPUT_SAMPLES);
 
-  //init RF to IF mixer
+  //init mixers
   ifMix_init(sin_lut,cos_lut,&LUTperiod,RF_IF_DECIMATION_RATIO);
   afMix_init(af_sin_lut,&afLUTperiod);
+
+  //init detectors
+  amDetector_init();
+  sfSsbDetector_init(afFrameBegin,afFrameEnd,40178,1000);		//TOOD parametrize sample rate
 
   /* USER CODE END 2 */
 
@@ -197,44 +199,17 @@ int main(void)
 		  //IF->AF mix
 		  afMix_mix(&if_IQ[ifBufferLastUpdate],&if_IQ[ifBufferLastUpdate+IF_HALF_SAMPLES],afCurrentFrame);
 
-		  // SSB/AM detector loop
-		  for (struct IQ *sample = afCurrentFrame; sample < afCurrentFrame + IF_HALF_SAMPLES; sample++) {
+		  amDetector_detect(afCurrentFrame,afCurrentFrame+IF_HALF_SAMPLES,am);
+		  sfSsbDetector_detect(afCurrentFrame,afCurrentFrame+IF_HALF_SAMPLES,ssb);
 
-			//SSB
-			//period for 1kHz is 40178 / 1000 => ~40 samples
-			//90 deg phase shift is ~40/4 => ~10 samples
-			struct IQ *sampleShifted = sample - 10;
-			if (sampleShifted < afFrameBegin) {
-				sampleShifted += IF_SAMPLES;
-			}
-			int32_t ssb = sample->i - sampleShifted->q;
-
-			// AM detection
-			int32_t I = sample->i;
-			int32_t Q = sample->q;
-			I *= I;
-			Q *= Q;
-
-			uint32_t IQsquareSum = I+Q;
-
-			//sqrt approximation by quadratic function to make it faster
-			float absOut = sqrt_approx_c;
-			absOut += IQsquareSum*sqrt_approx_b;
-			absOut += (IQsquareSum*IQsquareSum)*sqrt_approx_a;
-
-			//simple IIR LPF filter
-			//TODO HPF to remove DC offset?
-
-			dacOutFlt *=0.95;
-			dacOutFlt += (absOut*0.05);
-
-			//push to DAC
-			dacOut[dacOutPushed] = dacOutFlt;
+		  //push to DAC
+		  for (int i = 0; i < IF_HALF_SAMPLES; i++) {
+			dacOut[dacOutPushed] = am[i] & 0xFFFF;
 			dacOutPushed++;
 			if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
 			//push to SSB to UART
-			txData[txDataPushed] = (ssb/64)+128;
+			txData[txDataPushed] = (ssb[i]/64)+128;
 			txDataPushed++;
 			if (txDataPushed >= UART_BUFFER) {
 				txDataPushed = 0;
