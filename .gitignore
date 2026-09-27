@@ -9,4 +9,7 @@
 Drivers
 Debug
 
+tools/.venv
 tools/*.wav
+tools/*.h
+tools/*.csv
