@@ -2,17 +2,55 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 
-def generate_am_wave_c_array_uint16(sample_rate, carrier_freq, modulating_freq,
-                                    num_samples, modulation_depth=0.5,
-                                    amplitude=0.5, dc_offset=0.5):
+def generate_modulating_signal(sample_rate, modulating_freq, num_samples):
+    """
+        Generates sine wave audio signal [-1, 1].
+    """
     t = np.arange(num_samples) / sample_rate
-    modulator = np.sin(2 * np.pi * modulating_freq * t)
-    carrier = np.sin(2 * np.pi * carrier_freq * t)
-    am_wave = (1 + modulation_depth * modulator) * carrier
+    return np.sin(2 * np.pi * modulating_freq * t)
+
+def generate_square_phase_signal(sample_rate, num_samples, phase_shift_rad=np.pi/2, toggle_freq=1.0):
+    """
+        Generates square phase change
+    """
+    t = np.arange(num_samples) / sample_rate
+
+    square_wave = (np.sin(2 * np.pi * toggle_freq * t) >= 0).astype(float)
+    return square_wave * phase_shift_rad
+
+def generate_am_wave(
+        sample_rate,
+        carrier_freq,
+        audio_signal,
+        phase_signal,
+        modulation_depth=0.5, amplitude=0.5, dc_offset=0.0):
+    """
+        Generates AM wave modulated by audio_signal and carrier phase modulated
+        by phase_signal
+    """
+    num_samples = len(audio_signal)
+
+    t = np.arange(num_samples) / sample_rate
+
+    # Carrier with phase modulated
+    carrier = np.sin(2 * np.pi * carrier_freq * t + phase_signal)
+
+    # Amplitude modulation
+    am_wave = (1 + modulation_depth * audio_signal) * carrier
+
+    # Add amplitude and DC offset
     am_wave = am_wave * amplitude + dc_offset
-    am_wave = np.clip(am_wave, 0, 1)
-    samples_uint16 = np.round(am_wave * 4096).astype(np.uint16)
-    return am_wave, samples_uint16
+    return am_wave
+
+def convert_float_to_int16(signal_float, max_val_clamp=1.0):
+    """
+    Converts float [-max_val_clamp, max_val_clamp]
+    to int16 (-32767 do 32767).
+    """
+
+    clipped_signal = np.clip(signal_float, -max_val_clamp, max_val_clamp)
+    scaled_samples = np.round((clipped_signal / max_val_clamp) * 32767.0)
+    return scaled_samples.astype(np.int16)
 
 
 def iq_detector(samples, sample_rate, rf_freq, chunk_size=64):
@@ -199,7 +237,7 @@ def dpsk(wave, period,dc_offset=0.5):
 
     return wave
 
-def write_c_header(filename, array_name, samples, array_type="uint16_t"):
+def write_c_header(filename, array_name, samples, array_type="int16_t"):
     with open(filename, "w") as f:
         f.write("#ifndef " + array_name.upper() + "_H\n")
         f.write("#define " + array_name.upper() + "_H\n\n")
@@ -226,6 +264,7 @@ if __name__ == "__main__":
     modulation_depth = 0.3
     amplitude = 0.02
     dc_offset = 0.5
+    phase_modulating_freq = 75  #Hz (bits per second)
 
     print(f"carrier_freq: {carrier_freq} Hz")
 
@@ -233,18 +272,22 @@ if __name__ == "__main__":
     header_filename = "am_wave.h"
 
     # Generate waveform
-    am_wave, samples = generate_am_wave_c_array_uint16(
-        sample_rate, carrier_freq, modulating_freq,
-        num_samples, modulation_depth, amplitude, dc_offset
-    )
+    audio = generate_modulating_signal(sample_rate, modulating_freq, num_samples)
+    phase = generate_square_phase_signal(sample_rate, num_samples, phase_shift_rad=phase_modulating_freq)
+
+    am_wave = generate_am_wave(sample_rate, carrier_freq,
+                               audio_signal=audio,
+                               phase_signal=phase,
+                               modulation_depth=modulation_depth,
+                               amplitude=amplitude,
+                               dc_offset=dc_offset
+                               )
 
     #add white noise
     noise = np.random.normal(0, 0.1, num_samples)
     am_wave += noise
-    # am_wave = np.clip(am_wave, 0, 1)
 
-    #4600 is close to 55 bps
-    am_wave = dpsk(am_wave, 46000, dc_offset=dc_offset)
+    samples = convert_float_to_int16(am_wave)
 
     # Write header
     write_c_header(header_filename, array_name, samples)
