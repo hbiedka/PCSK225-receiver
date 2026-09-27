@@ -42,14 +42,14 @@ def generate_am_wave(
     am_wave = am_wave * amplitude + dc_offset
     return am_wave
 
-def convert_float_to_int16(signal_float, max_val_clamp=1.0):
+def convert_float_to_int16(signal_float, max_val_clamp=1.0, res=2048):
     """
     Converts float [-max_val_clamp, max_val_clamp]
     to int16 (-32767 do 32767).
     """
 
     clipped_signal = np.clip(signal_float, -max_val_clamp, max_val_clamp)
-    scaled_samples = np.round((clipped_signal / max_val_clamp) * 32767.0)
+    scaled_samples = np.round((clipped_signal / max_val_clamp) * float(res))
     return scaled_samples.astype(np.int16)
 
 
@@ -133,15 +133,20 @@ def write_c_header(filename, array_name, samples, array_type="int16_t"):
         f.write("#endif //" + array_name.upper() + "_H\n")
 
 if __name__ == "__main__":
+
+    # SDR parameters
+    downsample = 64     # decimation ratio from RF to AF
+    ssb_tuneoff = 1000  # tuneoff from carrier to generate SSB-like signal to phase detection
+
     # Parameters
-    sample_rate = 2571429      # Hz
-    carrier_freq = 225000      
-    modulating_freq = 1099     # Hz
-    num_samples = 200000  # Number of samples to generate
+    sample_rate = 2571429      # RF sample rate [Hz]
+    carrier_freq = 225000      # Carrier frequency [Hz]
+    modulating_freq = 1099     # Emulated sine wave frequency [Hz]
+    num_samples = int(50*sample_rate/modulating_freq)  # Number of samples to generate
     modulation_depth = 0.3
     amplitude = 0.02
     dc_offset = 0.5
-    phase_modulating_freq = 75  #Hz (bits per second)
+    phase_modulating_freq = 75  # DPSK modulation [Hz]
 
     print(f"carrier_freq: {carrier_freq} Hz")
 
@@ -164,15 +169,14 @@ if __name__ == "__main__":
     noise = np.random.normal(0, 0.1, num_samples)
     am_wave += noise
 
-    samples = convert_float_to_int16(am_wave)
+    rf_samples = convert_float_to_int16(am_wave)
 
     # Write header
-    write_c_header(header_filename, array_name, samples)
+    write_c_header(header_filename, array_name, rf_samples)
     print(f"Header file '{header_filename}' generated with array '{array_name}'.")
 
-    downsample = 64
     af_sample_rate = sample_rate/downsample
-    af_i,af_q = nco_iq_mix(am_wave*4096, sample_rate, carrier_freq, downsample)
+    af_i,af_q = nco_iq_mix(rf_samples.astype(int), sample_rate, carrier_freq, downsample)
 
     print(f"AF sample rate {af_sample_rate} Hz")
 
