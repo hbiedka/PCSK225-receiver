@@ -218,25 +218,6 @@ def simple_detector(samples, sample_rate, rf_freq):
 
     return np.array(I_vals)
 
-def dpsk(wave, period,dc_offset=0.5):
-    """    
-        Differential Phase Shift Keying (DPSK) modulation.
-    """
-
-    cnt = 0
-    phase = 1
-    for i in range(0, len(wave)):
-        wave[i] -= dc_offset
-        wave[i] *= phase
-        wave[i] += dc_offset
-
-        cnt += 1
-        if cnt >= period:
-            cnt = 0
-            phase = -phase
-
-    return wave
-
 def write_c_header(filename, array_name, samples, array_type="int16_t"):
     with open(filename, "w") as f:
         f.write("#ifndef " + array_name.upper() + "_H\n")
@@ -273,7 +254,7 @@ if __name__ == "__main__":
 
     # Generate waveform
     audio = generate_modulating_signal(sample_rate, modulating_freq, num_samples)
-    phase = generate_square_phase_signal(sample_rate, num_samples, phase_shift_rad=phase_modulating_freq)
+    phase = generate_square_phase_signal(sample_rate, num_samples, toggle_freq=phase_modulating_freq)
 
     am_wave = generate_am_wave(sample_rate, carrier_freq,
                                audio_signal=audio,
