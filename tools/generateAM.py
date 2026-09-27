@@ -9,14 +9,14 @@ def generate_modulating_signal(sample_rate, modulating_freq, num_samples):
     t = np.arange(num_samples) / sample_rate
     return np.sin(2 * np.pi * modulating_freq * t)
 
-def generate_square_phase_signal(sample_rate, num_samples, phase_shift_rad=np.pi/2, toggle_freq=1.0):
+def generate_square_phase_signal(sample_rate, num_samples, phase_shift_rad=np.pi/2, phase_offset=0, toggle_freq=1.0):
     """
         Generates square phase change
     """
     t = np.arange(num_samples) / sample_rate
 
     square_wave = (np.sin(2 * np.pi * toggle_freq * t) >= 0).astype(float)
-    return square_wave * phase_shift_rad
+    return square_wave * phase_shift_rad + phase_offset
 
 def generate_am_wave(
         sample_rate,
@@ -137,6 +137,7 @@ if __name__ == "__main__":
     # SDR parameters
     downsample = 64     # decimation ratio from RF to AF
     ssb_tuneoff = 1000  # tuneoff from carrier to generate SSB-like signal to phase detection
+    ref_osc_drift = 10  # drift between demodulated carrier and suboscillator
 
     # Parameters
     sample_rate = 2571429      # RF sample rate [Hz]
@@ -155,7 +156,7 @@ if __name__ == "__main__":
 
     # Generate waveform
     audio = generate_modulating_signal(sample_rate, modulating_freq, num_samples)
-    phase = generate_square_phase_signal(sample_rate, num_samples, toggle_freq=phase_modulating_freq)
+    phase = generate_square_phase_signal(sample_rate, num_samples, toggle_freq=phase_modulating_freq, phase_shift_rad=np.pi, phase_offset=-np.pi/2)
 
     am_wave = generate_am_wave(sample_rate, carrier_freq,
                                audio_signal=audio,
@@ -193,8 +194,41 @@ if __name__ == "__main__":
     for i in range(1, len(af_abs_vals)):
         af_abs_vals[i] = af_abs_vals[i-1] * 0.9 + af_abs_vals[i] * 0.1
 
-    # TODO - demodulate again, but using using carrier_freq-tuneoff,
-    # then do Hilbert transform
+    ssb_i,ssb_q = nco_iq_mix(rf_samples.astype(int), sample_rate, carrier_freq-ssb_tuneoff, downsample)
+
+    # filter I and Q components
+    for i in range(1,len(ssb_i)):
+        ssb_i[i] = ssb_i[i-1] * 0.9 + ssb_i[i] * 0.1
+        ssb_q[i] = ssb_q[i-1] * 0.9 + ssb_q[i] * 0.1
+
+    raw_phase = np.arctan2(ssb_q, ssb_i)
+
+    # create reference phase to compare with phase modulated SSB single
+    t = np.arange(len(ssb_i)) / af_sample_rate
+    reference_carrier_phase = 2 * np.pi * (ssb_tuneoff+ref_osc_drift) * t
+    ssb_phase = np.unwrap(raw_phase) - reference_carrier_phase
+
+    ssb_phase = (ssb_phase + np.pi) % (2 * np.pi) - np.pi
+
+    fig2 = plt.figure(figsize=(10, 3))
+    gs2 = fig2.add_gridspec(2,1)
+    ax_ssb = fig2.add_subplot(gs2[0,0])
+    ax_ssb.plot(ssb_i, label="I", alpha=0.7)
+    ax_ssb.plot(ssb_q, label="Q", alpha=0.7)
+    ax_ssb.set_title("SSB Demodulated Signal")
+    ax_ssb.set_xlabel("Sample index")
+    ax_ssb.set_ylabel("Amplitude (relative)")
+    ax_ssb.grid(True)
+    ax_ssb.legend()
+
+    ax_ssb_phase = fig2.add_subplot(gs2[1, 0])
+    ax_ssb_phase.plot(raw_phase*(180/np.pi), label="Phase of demodulated carrier", alpha=0.7)
+    ax_ssb_phase.plot(ssb_phase*(180/np.pi), label="Phase diff between carrier and reference", alpha=0.7)
+    ax_ssb_phase.set_title("Phase of SSB Signal (AF)")
+    ax_ssb_phase.set_xlabel("Output sample index")
+    ax_ssb_phase.set_ylabel("Phase (degrees)")
+    ax_ssb_phase.grid(True)
+    ax_ssb_phase.legend()
 
     fig = plt.figure(figsize=(12, 10))
     gs = fig.add_gridspec(4, 1, height_ratios=[1, 1, 1, 1])
