@@ -23,8 +23,6 @@
 /* USER CODE BEGIN Includes */
 #include <math.h>
 
-#include "af_sin_lut.h"
-
 #include "iq.h"
 #include "mixers/ifMix.h"
 #include "detectors/am.h"
