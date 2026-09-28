@@ -10,9 +10,8 @@
 
 #include "iq.h"
 
-void ifMix_init(int32_t *i_lut,int32_t *q_lut, uint32_t *period, uint32_t ratio);
-
-//TODO use const pointers
-void ifMix_Mix(uint16_t *inputBegin, uint16_t *inputEnd, struct IQ *outputBegin);
+void ifMix_init(uint32_t _sampleRate, uint32_t _downsampleRatio);
+void ifMix_setFreq(uint32_t freq);
+void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *outputBegin);
 
 #endif /* SRC_MIXERS_IFMIX_H_ */

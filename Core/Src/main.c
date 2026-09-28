@@ -23,15 +23,12 @@
 /* USER CODE BEGIN Includes */
 #include <math.h>
 
-#include "sin_lut.h"
-#include "cos_lut.h"
 #include "af_sin_lut.h"
 
 #include "iq.h"
 #include "mixers/ifMix.h"
-#include "mixers/afMix.h"
 #include "detectors/am.h"
-#include "detectors/sfssb.h"
+//#include "detectors/sfssb.h"
 
 /* USER CODE END Includes */
 
@@ -43,21 +40,26 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-//#define INPUT_SAMPLE_ORDER 13
-//#define OUTPUT_SAMPLE_ORDER 7
+// rf sample rate
+// cpu freq / ( ADC prescaler * ADC cycles per sample ) -> ~2571429 Hz
+#define RF_SAMPLE_RATE 72000000 / (2*14)
 
 #define INPUT_SAMPLES 8192
 #define INPUT_HALF_SAMPLES INPUT_SAMPLES/2
 
 #define RF_IF_DECIMATION_RATIO 64
 
-#define IF_SAMPLES 128	//INPUT_SAMPLES/DECIMATION_RATIO
-#define IF_HALF_SAMPLES IF_SAMPLES/2
+#define AF_SAMPLES 128	//RF_INPUT_SAMPLES/DECIMATION_RATIO
+#define AF_HALF_SAMPLES AF_SAMPLES/2
 
 #define OUTPUT_SAMPLES 128
 #define OUTPUT_HALF_SAMPLES OUTPUT_SAMPLES/2
 
 #define UART_BUFFER 128
+
+// af sample rate
+// cpu freq / ( ADC prescaler * ADC cycles per sample * RF to IF decimation ratio ) - AF is not decimated when demodulated from IF
+//#define AF_SAMPLE_RATE 72000000 / ( 2 * 14 * RF_IF_DECIMATION_RATIO )
 
 /* USER CODE END PD */
 
@@ -101,21 +103,14 @@ uint16_t *rfFrameBegin = rf;
 uint16_t *rfFrameHalf = &rf[INPUT_HALF_SAMPLES];
 uint16_t *rfFrameEnd = &rf[INPUT_SAMPLES];
 
-uint32_t LUTperiod = 11;
-
-struct IQ if_IQ[IF_SAMPLES];
-struct IQ *ifFrameBegin = if_IQ;
-struct IQ *ifFrameHalf = &if_IQ[IF_HALF_SAMPLES];
-
 volatile size_t ifBufferLastUpdate = 0xFFFFFFFF;
 size_t ifBufferPrevUpdate = 0xFFFFFFFF;
 
-size_t afLUTperiod = AF_SIN_LUT_SIZE;
-
 //AF I and Q
-struct IQ af_IQ[IF_SAMPLES];
+struct IQ af_IQ[AF_SAMPLES];
 struct IQ *afFrameBegin = af_IQ;
-struct IQ *afFrameEnd = &af_IQ[IF_SAMPLES];
+struct IQ *afFrameHalf = &af_IQ[AF_HALF_SAMPLES];
+struct IQ *afFrameEnd = &af_IQ[AF_SAMPLES];
 
 struct IQ *afCurrentFrame = af_IQ;
 
@@ -140,8 +135,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  int32_t am[IF_HALF_SAMPLES];
-  int32_t ssb[IF_HALF_SAMPLES];
+  int32_t am[AF_HALF_SAMPLES];
+  int32_t ssb[AF_HALF_SAMPLES];
 
   /* USER CODE END 1 */
 
@@ -177,12 +172,12 @@ int main(void)
   HAL_ADC_Start_DMA(&hadc1,(uint32_t*)rf,INPUT_SAMPLES);
 
   //init mixers
-  ifMix_init(sin_lut,cos_lut,&LUTperiod,RF_IF_DECIMATION_RATIO);
-  afMix_init(af_sin_lut,&afLUTperiod);
+  ifMix_init(RF_SAMPLE_RATE,RF_IF_DECIMATION_RATIO);
+  ifMix_setFreq(225000);
 
   //init detectors
   amDetector_init();
-  sfSsbDetector_init(afFrameBegin,afFrameEnd,40178,1000);		//TOOD parametrize sample rate
+  // TODO init SSB detector
 
   /* USER CODE END 2 */
 
@@ -196,14 +191,11 @@ int main(void)
 
 	  if (ifBufferLastUpdate != 0xFFFFFFFF && ifBufferLastUpdate != ifBufferPrevUpdate) {
 
-		  //IF->AF mix
-		  afMix_mix(&if_IQ[ifBufferLastUpdate],&if_IQ[ifBufferLastUpdate+IF_HALF_SAMPLES],afCurrentFrame);
-
-		  amDetector_detect(afCurrentFrame,afCurrentFrame+IF_HALF_SAMPLES,am);
-		  sfSsbDetector_detect(afCurrentFrame,afCurrentFrame+IF_HALF_SAMPLES,ssb);
+		  amDetector_detect(&af_IQ[ifBufferLastUpdate],&af_IQ[ifBufferLastUpdate+AF_HALF_SAMPLES],am);
+		  // TODO ssb detector
 
 		  //push to DAC
-		  for (int i = 0; i < IF_HALF_SAMPLES; i++) {
+		  for (int i = 0; i < AF_HALF_SAMPLES; i++) {
 			dacOut[dacOutPushed] = am[i] & 0xFFFF;
 			dacOutPushed++;
 			if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
@@ -220,7 +212,7 @@ int main(void)
 		  }
 
 		  //AF buffer hop and rollover
-		  afCurrentFrame += IF_HALF_SAMPLES;
+		  afCurrentFrame += AF_HALF_SAMPLES;
 		  if(afCurrentFrame >= afFrameEnd) afCurrentFrame = afFrameBegin;
 
 		  //IF buffer swap to wait from next update from ISR
@@ -570,15 +562,15 @@ static void MX_GPIO_Init(void)
 // Called when buffer is completely filled
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-	ifMix_Mix(rfFrameBegin, rfFrameHalf,ifFrameBegin);
+	ifMix_Mix(rfFrameBegin, rfFrameHalf,afFrameBegin);
 	ifBufferLastUpdate = 0;
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-	ifMix_Mix(rfFrameHalf,rfFrameEnd,ifFrameHalf);
-	ifBufferLastUpdate = IF_HALF_SAMPLES;
+	ifMix_Mix(rfFrameHalf,rfFrameEnd,afFrameHalf);
+	ifBufferLastUpdate = AF_HALF_SAMPLES;
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 }
 /* USER CODE END 4 */
