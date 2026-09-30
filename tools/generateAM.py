@@ -70,6 +70,63 @@ def generate_nco_luts(lut_bits=8):
 
     return sin_lut, cos_lut
 
+def generate_atan_lut(lut_bits=8,angle_scale=2**32):
+    lut_size = 1 << lut_bits  # 256 elements
+
+    # Create arcus tangens in range 0-1 (which converts to 0-pi/4)
+    x = np.linspace(0.0, 1.0, lut_size + 1)
+    angles_rad = np.arctan(x)
+
+    # Convert to binary radian (2pi = 65536)
+    scale_factor = float(angle_scale) / (2.0 * np.pi)
+    atan_lut = np.round(angles_rad * scale_factor)
+
+    write_c_header("atan_lut.h","atan_lut",atan_lut.astype(int),array_type="uint16_t")
+    return atan_lut
+
+def fast_atan2(y,x,atan_lut,angle_scale=2**32):
+
+    # angle coefficients
+    TWO_PI = angle_scale
+    PI = angle_scale/2
+    HALF_PI = angle_scale/4
+
+    # LUT size without last index -> equal to 2^lut_bits
+    lut_size = len(atan_lut)-1
+
+    if x == 0 and y == 0:
+        return 0
+
+    abs_y = abs(y)
+    abs_x = abs(x)
+
+    if abs_y > abs_x:
+        index = int(abs_x*lut_size/abs_y)
+        angle = atan_lut[index]
+
+        # swap to pi/2 - angle
+        angle = HALF_PI-angle
+    else:
+        # no swap
+        index = int(abs_y*lut_size/abs_x)
+        angle = atan_lut[index]
+
+    #quadrant correction
+    if x < 0:
+        if y < 0:
+            angle = PI + angle   # 3rd quadrant
+        else:
+            angle = PI - angle   # 2nd quadrant
+    else:
+        if y < 0:
+            angle = TWO_PI - angle   # 4th quadrant
+
+
+    # emulate integer rollover
+    angle %= TWO_PI
+
+    return angle
+
 def nco_iq_mix(rf_signal, sample_rate, rf_freq, downsample=64):
 
     lut_bits = 8
@@ -154,6 +211,10 @@ if __name__ == "__main__":
     array_name = "am_wave"
     header_filename = "am_wave.h"
 
+    #generate arcus tangens LUT
+    atan_lut = generate_atan_lut()
+    fast_atan2_vec = np.vectorize(fast_atan2, excluded=['atan_lut'])
+
     # Generate waveform
     audio = generate_modulating_signal(sample_rate, modulating_freq, num_samples)
     phase = generate_square_phase_signal(sample_rate, num_samples, toggle_freq=phase_modulating_freq, phase_shift_rad=np.pi, phase_offset=-np.pi/2)
@@ -188,7 +249,7 @@ if __name__ == "__main__":
 
     # demodulate to audio
     af_abs_vals = np.sqrt(af_i**2 + af_q**2)
-    af_phase = np.arctan2(af_q, af_i)
+    af_phase = fast_atan2_vec(af_q, af_i, atan_lut=atan_lut)*(np.pi*2/(2**32))
 
     #filter audio envelope
     for i in range(1, len(af_abs_vals)):
@@ -201,14 +262,14 @@ if __name__ == "__main__":
         ssb_i[i] = ssb_i[i-1] * 0.9 + ssb_i[i] * 0.1
         ssb_q[i] = ssb_q[i-1] * 0.9 + ssb_q[i] * 0.1
 
-    raw_phase = np.arctan2(ssb_q, ssb_i)
+    raw_phase = fast_atan2_vec(ssb_q, ssb_i, atan_lut=atan_lut)*(np.pi*2/(2**32))
 
     # create reference phase to compare with phase modulated SSB single
     t = np.arange(len(ssb_i)) / af_sample_rate
     reference_carrier_phase = 2 * np.pi * (ssb_tuneoff+ref_osc_drift) * t
     ssb_phase = np.unwrap(raw_phase) - reference_carrier_phase
 
-    ssb_phase = (ssb_phase + np.pi) % (2 * np.pi) - np.pi
+    ssb_phase = ssb_phase % (2 * np.pi)
 
     fig2 = plt.figure(figsize=(10, 3))
     gs2 = fig2.add_gridspec(2,1)
