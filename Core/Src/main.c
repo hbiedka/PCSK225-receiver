@@ -28,6 +28,8 @@
 #include "detectors/am.h"
 //#include "detectors/sfssb.h"
 
+#include "filters/dcOffset.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,10 +56,6 @@
 #define OUTPUT_HALF_SAMPLES OUTPUT_SAMPLES/2
 
 #define UART_BUFFER 128
-
-// af sample rate
-// cpu freq / ( ADC prescaler * ADC cycles per sample * RF to IF decimation ratio ) - AF is not decimated when demodulated from IF
-//#define AF_SAMPLE_RATE 72000000 / ( 2 * 14 * RF_IF_DECIMATION_RATIO )
 
 /* USER CODE END PD */
 
@@ -118,6 +116,9 @@ size_t dacOutPushed = 0;
 uint8_t txData[UART_BUFFER] = {0};
 size_t txDataPushed = 0;
 
+#define DC_OFFSET_FILTER_WINDOW_ORDER 7		//128
+uint16_t dcOffset;
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -169,8 +170,11 @@ int main(void)
 
   HAL_ADC_Start_DMA(&hadc1,(uint32_t*)rf,INPUT_SAMPLES);
 
+  //init filters
+  dcOffset_init(DC_OFFSET_FILTER_WINDOW_ORDER);
+
   //init mixers
-  ifMix_init(RF_SAMPLE_RATE,RF_IF_DECIMATION_RATIO);
+  ifMix_init(RF_SAMPLE_RATE,RF_IF_DECIMATION_RATIO,&dcOffset);
   ifMix_setFreq(225000);
 
   //init detectors
@@ -189,6 +193,9 @@ int main(void)
 
 	  if (ifBufferLastUpdate != 0xFFFFFFFF && ifBufferLastUpdate != ifBufferPrevUpdate) {
 
+		  // update dcOffset
+		  dcOffset = dcOffset_filter(*rfFrameBegin);
+
 		  amDetector_detect(&af_IQ[ifBufferLastUpdate],&af_IQ[ifBufferLastUpdate+AF_HALF_SAMPLES],am);
 		  // TODO ssb detector
 
@@ -198,16 +205,13 @@ int main(void)
 			dacOutPushed++;
 			if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
-			//push to SSB to UART
-			txData[txDataPushed] = (ssb[i]/64)+128;
-			txDataPushed++;
-			if (txDataPushed >= UART_BUFFER) {
-				txDataPushed = 0;
-				HAL_UART_Transmit_DMA(&huart3,txData,UART_BUFFER);
-
-			}
 
 		  }
+
+		  //push DC offset to UART
+		  uint8_t uartData[] = {*rfFrameBegin/4, dcOffset/4 };
+		  HAL_UART_Transmit_DMA(&huart3,uartData,sizeof(uartData));
+
 
 		  //AF buffer hop and rollover
 		  afCurrentFrame += AF_HALF_SAMPLES;

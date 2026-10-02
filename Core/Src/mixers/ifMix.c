@@ -14,12 +14,15 @@ size_t downsampleRatio;
 size_t phaseAcc;
 size_t phaseAccStep;
 
-void ifMix_init(uint32_t _sampleRate, uint32_t _downsampleRatio) {
+static uint16_t *dcOffset;
+
+void ifMix_init(uint32_t _sampleRate, uint32_t _downsampleRatio, uint16_t *_dcOffset) {
 	phaseAcc = 0;
 	phaseAccStep = 0;
 
 	sampleRate = _sampleRate;
 	downsampleRatio = _downsampleRatio;
+	dcOffset = _dcOffset;
 }
 
 void ifMix_setFreq(uint32_t freq)

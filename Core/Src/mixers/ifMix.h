@@ -10,7 +10,7 @@
 
 #include "iq.h"
 
-void ifMix_init(uint32_t _sampleRate, uint32_t _downsampleRatio);
+void ifMix_init(uint32_t _sampleRate, uint32_t _downsampleRatio, uint16_t *_dcOffset);
 void ifMix_setFreq(uint32_t freq);
 void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *outputBegin);
 
