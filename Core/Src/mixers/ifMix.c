@@ -28,7 +28,7 @@ void ifMix_init(uint32_t _sampleRate, uint32_t _downsampleRatio, uint16_t *_dcOf
 void ifMix_setFreq(uint32_t freq)
 {
 	// step = (f/sample_ratio)*2^32
-	phaseAccStep = (uint64_t)(freq*4294967296)/sampleRate;
+	phaseAccStep = (uint64_t)(freq*0x100000000)/sampleRate;
 }
 
 void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *outputBegin)
@@ -52,15 +52,14 @@ void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *
 
 			Isum += sin_lut[lutPos] * *sample;
 			Qsum += cos_lut[lutPos] * *sample;
-
  			sample++;
 			phaseAcc += phaseAccStep;
 		}
 
 		// I and Q are now ~(2^18) -> ~2048x128 (ADC midpoint * num of samples
 		//convert it to ~ 2^9
-		outSample->i = Isum >> 9;
-		outSample->q = Qsum >> 9;
+		outSample->i = Isum >> 7;
+		outSample->q = Qsum >> 7;
 		outSample++;
 
 	}

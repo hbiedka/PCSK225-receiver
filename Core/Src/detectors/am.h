@@ -11,6 +11,7 @@
 #include "iq.h"
 
 void amDetector_init(void);
+void amDetector_detectSample(struct IQ *input, int32_t *output);
 void amDetector_detect(struct IQ *inputBegin, struct IQ *inputEnd, int32_t *outputBegin);
 
 #endif /* SRC_DETECTORS_AM_H_ */

@@ -134,8 +134,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  int32_t am[AF_HALF_SAMPLES];
-  int32_t ssb[AF_HALF_SAMPLES];
 
   /* USER CODE END 1 */
 
@@ -192,20 +190,22 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
 	  if (ifBufferLastUpdate != 0xFFFFFFFF && ifBufferLastUpdate != ifBufferPrevUpdate) {
+		  struct IQ *afBufferBegin = &af_IQ[ifBufferLastUpdate];
+		  struct IQ *afBufferEnd = &af_IQ[ifBufferLastUpdate+AF_HALF_SAMPLES];
 
 		  // update dcOffset
 		  dcOffset = dcOffset_filter(*rfFrameBegin);
 
-		  amDetector_detect(&af_IQ[ifBufferLastUpdate],&af_IQ[ifBufferLastUpdate+AF_HALF_SAMPLES],am);
-		  // TODO ssb detector
+		  struct IQ *afBuffer = afBufferBegin;
+		  while(afBuffer < afBufferEnd) {
 
-		  //push to DAC
-		  for (int i = 0; i < AF_HALF_SAMPLES; i++) {
-			dacOut[dacOutPushed] = am[i] & 0xFFFF;
-			dacOutPushed++;
-			if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
+			  int32_t amSample;
+			  amDetector_detectSample(afBuffer,&amSample);
+			  dacOut[dacOutPushed] = amSample & 0xFFFF;
+			  dacOutPushed++;
+			  if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
-
+			  afBuffer++;
 		  }
 
 		  //push DC offset to UART

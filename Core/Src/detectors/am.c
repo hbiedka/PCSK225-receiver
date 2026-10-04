@@ -19,30 +19,32 @@ void amDetector_init(void)
 	filterBuffer = 0;
 }
 
+void amDetector_detectSample(struct IQ *input, int32_t *output)
+{
+	int32_t I = input->i;
+	int32_t Q = input->q;
+	I *= I;
+	Q *= Q;
+
+	uint32_t IQsquareSum = I+Q;
+
+	//sqrt approximation by quadratic function to make it faster
+	float absOut = sqrt_approx_c;
+	absOut += IQsquareSum*sqrt_approx_b;
+	absOut += (IQsquareSum*IQsquareSum)*sqrt_approx_a;
+
+	//simple IIR LPF filter
+	filterBuffer *=0.95;
+	filterBuffer += (absOut*0.05);
+
+	*output = filterBuffer;
+}
+
 void amDetector_detect(struct IQ *inputBegin, struct IQ *inputEnd, int32_t *outputBegin)
 {
-	  int32_t *out = outputBegin;
-	  for (struct IQ *sample = inputBegin; sample < inputEnd; sample++) {
-
-		int32_t I = sample->i;
-		int32_t Q = sample->q;
-		I *= I;
-		Q *= Q;
-
-		uint32_t IQsquareSum = I+Q;
-
-		//sqrt approximation by quadratic function to make it faster
-		float absOut = sqrt_approx_c;
-		absOut += IQsquareSum*sqrt_approx_b;
-		absOut += (IQsquareSum*IQsquareSum)*sqrt_approx_a;
-
-		//simple IIR LPF filter
-		//TODO HPF to remove DC offset?
-
-		filterBuffer *=0.95;
-		filterBuffer += (absOut*0.05);
-
-		*out = filterBuffer;
-		out++;
-	  }
+	int32_t *out = outputBegin;
+	for (struct IQ *sample = inputBegin; sample < inputEnd; sample++) {
+	  amDetector_detectSample(sample,out);
+	  out++;
+	}
 }
