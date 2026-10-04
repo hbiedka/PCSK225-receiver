@@ -50,8 +50,10 @@ void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *
 			/* LUT pos is 8 most significant bits of 32-bit phase accumulator */
 			size_t lutPos = phaseAcc >> 24;
 
-			Isum += sin_lut[lutPos] * *sample;
-			Qsum += cos_lut[lutPos] * *sample;
+			// remove DC offset
+			int16_t sampleAC = (int32_t)(*sample) - (int32_t)(*dcOffset);
+			Isum += sin_lut[lutPos] * sampleAC;
+			Qsum += cos_lut[lutPos] * sampleAC;
  			sample++;
 			phaseAcc += phaseAccStep;
 		}

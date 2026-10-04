@@ -12,7 +12,7 @@ const float sqrt_approx_a = -8.3553519533e-12f;
 const float sqrt_approx_b = 3.3562705851e-04f;
 const float sqrt_approx_c = 6.9878899460e+02f;
 
-static float filterBuffer;
+static int32_t filterBuffer;
 
 void amDetector_init(void)
 {
@@ -34,9 +34,8 @@ void amDetector_detectSample(struct IQ *input, int32_t *output)
 	absOut += (IQsquareSum*IQsquareSum)*sqrt_approx_a;
 
 	//simple IIR LPF filter
-	filterBuffer *=0.95;
-	filterBuffer += (absOut*0.05);
-
+	int32_t absOutInt = absOut;
+	filterBuffer += (absOutInt - filterBuffer) >> 4;
 	*output = filterBuffer;
 }
 
