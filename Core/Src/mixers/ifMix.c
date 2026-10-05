@@ -60,8 +60,8 @@ void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *
 
 		// I and Q are now ~(2^18) -> ~2048x128 (ADC midpoint * num of samples
 		//convert it to ~ 2^9
-		outSample->i = Isum >> 7;
-		outSample->q = Qsum >> 7;
+		outSample->i = Isum >> 9;
+		outSample->q = Qsum >> 9;
 		outSample++;
 
 	}
