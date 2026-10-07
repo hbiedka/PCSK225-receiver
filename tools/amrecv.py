@@ -10,10 +10,10 @@ wav_filename = "output.wav"
 
 
 # Parameters
-serial_port = '/dev/ttyUSB0'     # Change this to your serial port
+serial_port = '/dev/ttyACM0'     # Change this to your serial port
 baudrate = 460800
-sample_rate = 40179  # Hz
-duration_sec = 60         # How long to record
+sample_rate = 10045  # Hz
+duration_sec = 10         # How long to record
 
 # Open serial
 ser = serial.Serial(serial_port, baudrate, timeout=1)
@@ -61,7 +61,7 @@ ser.close()
 audio_float = (samples.astype(np.float32) - 128) / 128.0
 
 #save to csv
-np.savetxt("output.csv", audio_float, delimiter=",")
+np.savetxt("output.csv", samples, delimiter=",",fmt="%d")
 
 # Save to WAV
 sf.write(wav_filename, audio_float, samplerate=sample_rate)

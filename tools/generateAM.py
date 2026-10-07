@@ -192,7 +192,7 @@ def write_c_header(filename, array_name, samples, array_type="int16_t"):
 if __name__ == "__main__":
 
     # SDR parameters
-    downsample = 64     # decimation ratio from RF to AF
+    downsample = 256     # decimation ratio from RF to AF
     ssb_tuneoff = 1000  # tuneoff from carrier to generate SSB-like signal to phase detection
     ref_osc_drift = 10  # drift between demodulated carrier and suboscillator
 
@@ -203,7 +203,7 @@ if __name__ == "__main__":
     num_samples = int(50*sample_rate/modulating_freq)  # Number of samples to generate
     modulation_depth = 0.3
     amplitude = 0.02
-    dc_offset = 0.5
+    dc_offset = 0.0
     phase_modulating_freq = 75  # DPSK modulation [Hz]
 
     print(f"carrier_freq: {carrier_freq} Hz")
