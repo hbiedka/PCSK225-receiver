@@ -199,7 +199,7 @@ int main(void)
 
 			  int32_t amSample;
 			  amDetector_detectSample(afBuffer,&amSample);
-			  dacOut[dacOutPushed] = amSample & 0xFFFF;
+			  dacOut[dacOutPushed] = (amSample/2) & 0xFFFF;
 			  dacOutPushed++;
 			  if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
