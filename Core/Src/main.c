@@ -47,7 +47,7 @@
 #define INPUT_SAMPLES 8192
 #define INPUT_HALF_SAMPLES INPUT_SAMPLES/2
 
-#define RF_IF_DECIMATION_POW2	8	//=256
+#define RF_IF_DECIMATION_POW2	6	//=64
 
 #define AF_SAMPLES (INPUT_SAMPLES>>RF_IF_DECIMATION_POW2)
 #define AF_HALF_SAMPLES AF_SAMPLES/2
@@ -402,7 +402,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 7167;
+  htim2.Init.Period = 1791;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
