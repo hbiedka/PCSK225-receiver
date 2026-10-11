@@ -192,7 +192,7 @@ def write_c_header(filename, array_name, samples, array_type="int16_t"):
 if __name__ == "__main__":
 
     # SDR parameters
-    downsample = 256     # decimation ratio from RF to AF
+    downsample = 64     # decimation ratio from RF to AF
     ssb_tuneoff = 1000  # tuneoff from carrier to generate SSB-like signal to phase detection
     ref_osc_drift = 10  # drift between demodulated carrier and suboscillator
 

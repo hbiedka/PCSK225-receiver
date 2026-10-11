@@ -12,7 +12,7 @@ wav_filename = "output.wav"
 # Parameters
 serial_port = '/dev/ttyACM0'     # Change this to your serial port
 baudrate = 460800
-sample_rate = 10045  # Hz
+sample_rate = 40179  # Hz
 duration_sec = 10         # How long to record
 
 # Open serial
