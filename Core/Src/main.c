@@ -26,7 +26,7 @@
 #include "iq.h"
 #include "mixers/ifMix.h"
 #include "detectors/am.h"
-//#include "detectors/sfssb.h"
+#include "detectors/arctg2.h"
 
 #include "filters/dcOffset.h"
 
@@ -203,8 +203,9 @@ int main(void)
 			  dacOutPushed++;
 			  if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
+			  uint32_t angle = IQarctg2(afBuffer);
 
-			  *txBuffer = amSample >> 4;
+			  *txBuffer = angle >> 24;
 			  txBuffer++;
 
 			  afBuffer++;
