@@ -108,6 +108,8 @@ struct IQ *afFrameEnd = &af_IQ[AF_SAMPLES];
 
 struct IQ *afCurrentFrame = af_IQ;
 
+struct IQ filteredIQ;
+
 size_t dacOutPushed = 0;
 
 
@@ -167,6 +169,8 @@ int main(void)
 
   //init filters
   dcOffset_init(DC_OFFSET_FILTER_WINDOW_ORDER);
+  filteredIQ.i = 0;
+  filteredIQ.q = 0;
 
   //init mixers
   ifMix_init(RF_SAMPLE_RATE,RF_IF_DECIMATION_POW2,&dcOffset);
@@ -197,13 +201,17 @@ int main(void)
 		  struct IQ *afBuffer = afBufferBegin;
 		  while(afBuffer < afBufferEnd) {
 
+			  //filter IQ
+			  filteredIQ.i += (afBuffer->i - filteredIQ.i) >> 2;
+			  filteredIQ.q += (afBuffer->q - filteredIQ.q) >> 2;
+
 			  int32_t amSample;
-			  amDetector_detectSample(afBuffer,&amSample);
+			  amDetector_detectSample(&filteredIQ,&amSample);
 			  dacOut[dacOutPushed] = (amSample/2) & 0xFFFF;
 			  dacOutPushed++;
 			  if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
-			  uint32_t angle = IQarctg2(afBuffer);
+			  uint32_t angle = IQarctg2(&filteredIQ);
 
 			  *txBuffer = angle >> 24;
 			  txBuffer++;
