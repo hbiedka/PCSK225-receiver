@@ -40,9 +40,8 @@ void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *
 	struct IQ *outSample = outputBegin;
 
 	while (1) {
-
-		chunkLastSample += downsampleRatio;
 		if (chunkLastSample >= inputEnd) break;
+		chunkLastSample += downsampleRatio;
 
 		int32_t Isum = 0;
 		int32_t Qsum = 0;
