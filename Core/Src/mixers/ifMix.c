@@ -10,18 +10,20 @@
 #include "cos_lut.h"
 
 uint32_t sampleRate;
-size_t downsampleRatio;
-size_t phaseAcc;
-size_t phaseAccStep;
+static size_t downsampleRatioPow2;
+static size_t downsampleRatio;
+static size_t phaseAcc;
+static size_t phaseAccStep;
 
 static uint16_t *dcOffset;
 
-void ifMix_init(uint32_t _sampleRate, uint32_t _downsampleRatio, uint16_t *_dcOffset) {
+void ifMix_init(uint32_t _sampleRate, uint32_t _downsampleRatioPow2, uint16_t *_dcOffset) {
 	phaseAcc = 0;
 	phaseAccStep = 0;
 
 	sampleRate = _sampleRate;
-	downsampleRatio = _downsampleRatio;
+	downsampleRatioPow2 = _downsampleRatioPow2;
+	downsampleRatio = 1 << downsampleRatioPow2;
 	dcOffset = _dcOffset;
 }
 
@@ -48,7 +50,7 @@ void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *
 		while(sample < chunkLastSample) {
 
 			/* LUT pos is 8 most significant bits of 32-bit phase accumulator */
-			size_t lutPos = phaseAcc >> 24;
+			uint8_t lutPos = (uint8_t)(phaseAcc >> 24);
 
 			// remove DC offset
 			int16_t sampleAC = (int32_t)(*sample) - (int32_t)(*dcOffset);
@@ -58,10 +60,9 @@ void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *
 			phaseAcc += phaseAccStep;
 		}
 
-		// I and Q are now ~(2^18) -> ~2048x128 (ADC midpoint * num of samples
-		//convert it to ~ 2^9
-		outSample->i = Isum >> 9;
-		outSample->q = Qsum >> 9;
+		// calculate average
+		outSample->i = Isum >> downsampleRatioPow2;
+		outSample->q = Qsum >> downsampleRatioPow2;
 		outSample++;
 
 	}
