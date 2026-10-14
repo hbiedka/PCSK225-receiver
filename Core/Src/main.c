@@ -27,6 +27,7 @@
 #include "mixers/ifMix.h"
 #include "detectors/am.h"
 #include "detectors/arctg2.h"
+#include "detectors/pll.h"
 
 #include "filters/dcOffset.h"
 
@@ -112,7 +113,6 @@ struct IQ filteredIQ;
 
 size_t dacOutPushed = 0;
 
-
 uint8_t txData[UART_BUFFER] = {0};
 size_t txDataPushed = 0;
 
@@ -174,11 +174,11 @@ int main(void)
 
   //init mixers
   ifMix_init(RF_SAMPLE_RATE,RF_IF_DECIMATION_POW2,&dcOffset);
-  ifMix_setFreq(225000);
+  ifMix_setFreq(224000);
 
   //init detectors
   amDetector_init();
-  // TODO init SSB detector
+  pll_init(RF_SAMPLE_RATE,1000);
 
   /* USER CODE END 2 */
 
@@ -213,7 +213,10 @@ int main(void)
 
 			  uint32_t angle = IQarctg2(&filteredIQ);
 
-			  *txBuffer = angle >> 24;
+//			  //angle correction
+			  int32_t angleCorr = pll_detect(angle);
+
+			  *txBuffer = (angleCorr+0x80000000) >> 24;
 			  txBuffer++;
 
 			  afBuffer++;
@@ -536,17 +539,13 @@ static void MX_GPIO_Init(void)
 
 // Called when buffer is completely filled
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
-	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 	ifMix_Mix(rfFrameBegin, rfFrameHalf,afFrameBegin);
 	ifBufferLastUpdate = 0;
-	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 	ifMix_Mix(rfFrameHalf,rfFrameEnd,afFrameHalf);
 	ifBufferLastUpdate = AF_HALF_SAMPLES;
-	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 }
 /* USER CODE END 4 */
 
