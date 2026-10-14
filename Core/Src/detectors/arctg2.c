@@ -5,6 +5,8 @@
  *      Author: hubert
  */
 
+#include <stdlib.h>
+
 #include "arctg2.h"
 
 #define ATAN_LUT_SIZE 256

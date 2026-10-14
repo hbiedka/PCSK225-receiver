@@ -8,7 +8,6 @@
 #ifndef SRC_DETECTORS_ARCTG2_H_
 #define SRC_DETECTORS_ARCTG2_H_
 
-#include <stdlib.h>
 #include "iq.h"
 
 #define ATAN_PI 0x80000000	//(2^32)/2 -> 180 deg.
