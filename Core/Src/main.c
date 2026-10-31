@@ -56,7 +56,7 @@
 #define OUTPUT_SAMPLES 128
 #define OUTPUT_HALF_SAMPLES OUTPUT_SAMPLES/2
 
-#define UART_BUFFER AF_HALF_SAMPLES
+#define UART_BUFFER (AF_HALF_SAMPLES*4+2)
 
 /* USER CODE END PD */
 
@@ -174,7 +174,7 @@ int main(void)
 
   //init mixers
   ifMix_init(RF_SAMPLE_RATE,RF_IF_DECIMATION_POW2,&dcOffset);
-  ifMix_setFreq(224000);
+  ifMix_setFreq(225000);
 
   //init detectors
   amDetector_init();
@@ -191,15 +191,35 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
 	  if (ifBufferLastUpdate != 0xFFFFFFFF && ifBufferLastUpdate != ifBufferPrevUpdate) {
+		  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
+
 		  struct IQ *afBufferBegin = &af_IQ[ifBufferLastUpdate];
 		  struct IQ *afBufferEnd = &af_IQ[ifBufferLastUpdate+AF_HALF_SAMPLES];
 
 		  // update dcOffset
 		  dcOffset = dcOffset_filter(*rfFrameBegin);
 
-		  uint8_t *txBuffer = txData;
+		  txData[0] = 0xFF;
+		  txData[1] = 0xFF;
+		  uint8_t *txBuffer = txData+2;
+
 		  struct IQ *afBuffer = afBufferBegin;
 		  while(afBuffer < afBufferEnd) {
+
+//			  uint16_t i_val = (uint16_t)(afBuffer->i >> 16);
+//			  uint16_t q_val = (uint16_t)(afBuffer->q >> 16);
+			  uint16_t i_val = (uint16_t)(afBuffer->i & 0xFFFF);
+			  uint16_t q_val = (uint16_t)(afBuffer->q & 0xFFFF);
+
+
+			  if(i_val == 0xFFFF) i_val = 0xFFFE;
+			  if(q_val == 0xFFFF) q_val = 0xFFFE;
+
+			  txBuffer[0] = (i_val >> 8) & 0xFF;
+			  txBuffer[1] = i_val & 0xFF;
+			  txBuffer[2] = (q_val >> 8) & 0xFF;
+			  txBuffer[3] = q_val & 0xFF;
+			  txBuffer+=4;
 
 			  //filter IQ
 			  filteredIQ.i += (afBuffer->i - filteredIQ.i) >> 2;
@@ -207,24 +227,16 @@ int main(void)
 
 			  int32_t amSample;
 			  amDetector_detectSample(&filteredIQ,&amSample);
-			  dacOut[dacOutPushed] = (amSample/2) & 0xFFFF;
+			  dacOut[dacOutPushed] = (amSample) & 0xFFFF;
 			  dacOutPushed++;
 			  if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
-
-			  uint32_t angle = IQarctg2(&filteredIQ);
-
-//			  //angle correction
-			  int32_t angleCorr = pll_detect(angle);
-
-			  *txBuffer = (angleCorr+0x80000000) >> 24;
-			  txBuffer++;
 
 			  afBuffer++;
 		  }
 
 		  //push compressed audio to UART
+		  while (huart2.gState != HAL_UART_STATE_READY);
 		  HAL_UART_Transmit_DMA(&huart2,txData,sizeof(txData));
-
 
 		  //AF buffer hop and rollover
 		  afCurrentFrame += AF_HALF_SAMPLES;
@@ -232,6 +244,8 @@ int main(void)
 
 		  //IF buffer swap to wait from next update from ISR
 		  ifBufferPrevUpdate = ifBufferLastUpdate;
+
+		  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
 
 	  }
 
