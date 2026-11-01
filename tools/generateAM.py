@@ -53,20 +53,16 @@ def convert_float_to_int16(signal_float, max_val_clamp=1.0, res=2048):
     return scaled_samples.astype(np.int16)
 
 
-def generate_nco_luts(lut_bits=8):
+def generate_nco_luts(lut_bits=8, peak=65536):
     lut_size = 1 << lut_bits  # 256
     indices = np.arange(lut_size)
 
-    # Wartości w zakresie -127 .. 127 dla int8_t
-    sin_lut = np.round(127 * np.sin(2 * np.pi * indices / lut_size)).astype(
-        np.int8
-    )
-    cos_lut = np.round(127 * np.cos(2 * np.pi * indices / lut_size)).astype(
-        np.int8
-    )
+    # depth to fix in
+    sin_lut = np.round(peak * np.sin(2 * np.pi * indices / lut_size)).astype(np.int32)
+    cos_lut = np.round(peak * np.cos(2 * np.pi * indices / lut_size)).astype(np.int32)
 
-    write_c_header("sin_lut.h", "sin_lut", sin_lut, array_type="int8_t")
-    write_c_header("cos_lut.h", "cos_lut", cos_lut, array_type="int8_t")
+    write_c_header("sin_lut.h", "sin_lut", sin_lut, array_type="int32_t")
+    write_c_header("cos_lut.h", "cos_lut", cos_lut, array_type="int32_t")
 
     return sin_lut, cos_lut
 
@@ -81,7 +77,7 @@ def generate_atan_lut(lut_bits=8,angle_scale=2**32):
     scale_factor = float(angle_scale) / (2.0 * np.pi)
     atan_lut = np.round(angles_rad * scale_factor)
 
-    write_c_header("atan_lut.h","atan_lut",atan_lut.astype(int),array_type="uint16_t")
+    write_c_header("atan_lut.h","atan_lut",atan_lut.astype(int),array_type="uint32_t")
     return atan_lut
 
 def fast_atan2(y,x,atan_lut,angle_scale=2**32):
@@ -166,8 +162,8 @@ def nco_iq_mix(rf_signal, sample_rate, rf_freq, downsample=64):
 
             i+=1
 
-        I_samples.append(I_sum)
-        Q_samples.append(Q_sum)
+        I_samples.append(I_sum/downsample)
+        Q_samples.append(Q_sum/downsample)
 
     return np.array(I_samples), np.array(Q_samples)
 
@@ -192,15 +188,15 @@ def write_c_header(filename, array_name, samples, array_type="int16_t"):
 if __name__ == "__main__":
 
     # SDR parameters
-    downsample = 64     # decimation ratio from RF to AF
+    downsample = 256     # decimation ratio from RF to AF
     ssb_tuneoff = 1000  # tuneoff from carrier to generate SSB-like signal to phase detection
     ref_osc_drift = 10  # drift between demodulated carrier and suboscillator
 
     # Parameters
-    sample_rate = 2571429      # RF sample rate [Hz]
+    sample_rate = 2250000      # RF sample rate [Hz]
     carrier_freq = 225000      # Carrier frequency [Hz]
     modulating_freq = 1099     # Emulated sine wave frequency [Hz]
-    num_samples = int(50*sample_rate/modulating_freq)  # Number of samples to generate
+    num_samples = int(20*sample_rate/modulating_freq)  # Number of samples to generate
     modulation_depth = 0.3
     amplitude = 0.02
     dc_offset = 0.0
@@ -217,7 +213,7 @@ if __name__ == "__main__":
 
     # Generate waveform
     audio = generate_modulating_signal(sample_rate, modulating_freq, num_samples)
-    phase = generate_square_phase_signal(sample_rate, num_samples, toggle_freq=phase_modulating_freq, phase_shift_rad=np.pi, phase_offset=-np.pi/2)
+    phase = generate_square_phase_signal(sample_rate, num_samples, toggle_freq=phase_modulating_freq, phase_shift_rad=np.pi/4, phase_offset=-np.pi)
 
     am_wave = generate_am_wave(sample_rate, carrier_freq,
                                audio_signal=audio,
@@ -228,7 +224,7 @@ if __name__ == "__main__":
                                )
 
     #add white noise
-    noise = np.random.normal(0, 0.1, num_samples)
+    noise = np.random.normal(-0.01, 0.01, num_samples)
     am_wave += noise
 
     rf_samples = convert_float_to_int16(am_wave)
@@ -242,25 +238,25 @@ if __name__ == "__main__":
 
     print(f"AF sample rate {af_sample_rate} Hz")
 
+    af_i_noflt = af_i.copy()
+    af_q_noflt = af_q.copy()
+
     # filter I and Q components
     for i in range(1,len(af_i)):
-        af_i[i] = af_i[i-1] * 0.9 + af_i[i] * 0.1
-        af_q[i] = af_q[i-1] * 0.9 + af_q[i] * 0.1
+        af_i[i] = af_i[i-1] + (af_i[i]-af_i[i-1])/2
+        af_q[i] = af_q[i-1] + (af_q[i]-af_q[i-1])/2
 
     # demodulate to audio
     af_abs_vals = np.sqrt(af_i**2 + af_q**2)
     af_phase = fast_atan2_vec(af_q, af_i, atan_lut=atan_lut)*(np.pi*2/(2**32))
 
-    #filter audio envelope
-    for i in range(1, len(af_abs_vals)):
-        af_abs_vals[i] = af_abs_vals[i-1] * 0.9 + af_abs_vals[i] * 0.1
 
     ssb_i,ssb_q = nco_iq_mix(rf_samples.astype(int), sample_rate, carrier_freq-ssb_tuneoff, downsample)
 
     # filter I and Q components
     for i in range(1,len(ssb_i)):
-        ssb_i[i] = ssb_i[i-1] * 0.9 + ssb_i[i] * 0.1
-        ssb_q[i] = ssb_q[i-1] * 0.9 + ssb_q[i] * 0.1
+        ssb_i[i] = ssb_i[i-1] + (ssb_i[i]-ssb_i[i-1])/2
+        ssb_q[i] = ssb_q[i-1] + (ssb_q[i]-ssb_q[i-1])/2
 
     raw_phase = fast_atan2_vec(ssb_q, ssb_i, atan_lut=atan_lut)*(np.pi*2/(2**32))
 
@@ -296,7 +292,7 @@ if __name__ == "__main__":
 
     # Row 1: AM waveform spanning both columns
     ax_am = fig.add_subplot(gs[0, 0])
-    ax_am.plot(am_wave, label="AM Wave (Normalized)", alpha=0.7)
+    ax_am.plot(rf_samples, label="AM Wave (int16)", alpha=0.7)
     ax_am.set_title("AM Waveform")
     ax_am.set_xlabel("Sample index")
     ax_am.set_ylabel("Amplitude [0, 1]")
@@ -305,6 +301,8 @@ if __name__ == "__main__":
 
     # Row 2: AF I/Q
     ax_af_iq = fig.add_subplot(gs[1, 0])
+    ax_af_iq.plot(af_i_noflt, label="AF I (unfilfered)", alpha=0.7)
+    ax_af_iq.plot(af_q_noflt, label="AF Q (unfilfered)", alpha=0.7)
     ax_af_iq.plot(af_i, label="AF I", alpha=0.7)
     ax_af_iq.plot(af_q, label="AF Q", alpha=0.7)
     ax_af_iq.set_title("AF I/Q Components")
@@ -328,6 +326,7 @@ if __name__ == "__main__":
     ax_af_phase.set_title("Phase of Demodulated Signal (AF)")
     ax_af_phase.set_xlabel("Output sample index")
     ax_af_phase.set_ylabel("Phase (degrees)")
+    ax_af_phase.set_ylim([0,360])
     ax_af_phase.grid(True)
     ax_af_phase.legend()
 
