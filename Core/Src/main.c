@@ -206,10 +206,8 @@ int main(void)
 		  struct IQ *afBuffer = afBufferBegin;
 		  while(afBuffer < afBufferEnd) {
 
-//			  uint16_t i_val = (uint16_t)(afBuffer->i >> 16);
-//			  uint16_t q_val = (uint16_t)(afBuffer->q >> 16);
-			  uint16_t i_val = (uint16_t)(afBuffer->i & 0xFFFF);
-			  uint16_t q_val = (uint16_t)(afBuffer->q & 0xFFFF);
+			  uint16_t i_val = (uint16_t)(afBuffer->i >> 6);
+			  uint16_t q_val = (uint16_t)(afBuffer->q >> 6);
 
 
 			  if(i_val == 0xFFFF) i_val = 0xFFFE;
