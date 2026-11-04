@@ -224,12 +224,12 @@ int main(void)
 			  txBuffer+=4;
 
 			  //filter IQ
-			  filteredIQ.i += (afBuffer->i - filteredIQ.i) >> 2;
-			  filteredIQ.q += (afBuffer->q - filteredIQ.q) >> 2;
+			  filteredIQ.i += (afBuffer->i - filteredIQ.i) >> 4;
+			  filteredIQ.q += (afBuffer->q - filteredIQ.q) >> 4;
 
 			  int32_t amSample;
 			  amDetector_detectSample(&filteredIQ,&amSample);
-			  dacOut[dacOutPushed] = (amSample) & 0xFFFF;
+			  dacOut[dacOutPushed] = (amSample/2) & 0xFFFF;
 			  dacOutPushed++;
 			  if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
