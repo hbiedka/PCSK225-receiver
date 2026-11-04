@@ -52,8 +52,8 @@ void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *
 
 			// remove DC offset
 			int16_t sampleAC = (int32_t)(*sample) - (int32_t)(*dcOffset);
-			Isum += sin_lut[lutPos] * sampleAC;
-			Qsum += cos_lut[lutPos] * sampleAC;
+			Isum += cos_lut[lutPos] * sampleAC;
+			Qsum += sin_lut[lutPos] * sampleAC;
  			sample++;
 			phaseAcc += phaseAccStep;
 		}
