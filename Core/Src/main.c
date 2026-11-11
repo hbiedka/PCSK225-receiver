@@ -142,6 +142,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+
   HAL_Init();
 
   /* USER CODE BEGIN Init */
@@ -182,7 +183,7 @@ int main(void)
 
   //init detectors
   amDetector_init();
-  pll_init(RF_SAMPLE_RATE,1000);
+  pll_init(RF_SAMPLE_RATE,0);
 
   /* USER CODE END 2 */
 
@@ -210,10 +211,22 @@ int main(void)
 		  struct IQ *afBuffer = afBufferBegin;
 		  while(afBuffer < afBufferEnd) {
 
-			  uint16_t i_val = (uint16_t)(afBuffer->i >> 6);
-			  uint16_t q_val = (uint16_t)(afBuffer->q >> 6);
+			  //filter IQ
+			  filteredIQ.i += (afBuffer->i - filteredIQ.i) >> 4;
+			  filteredIQ.q += (afBuffer->q - filteredIQ.q) >> 4;
 
 
+			  int32_t amSample;
+			  amDetector_detectSample(&filteredIQ,&amSample);
+			  dacOut[dacOutPushed] = (amSample/2) & 0xFFFF;
+			  dacOutPushed++;
+			  if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
+
+			  uint32_t angle = IQarctg2(&filteredIQ);
+			  uint32_t pll = pll_detect(angle);
+
+			  uint16_t i_val = (uint16_t)(angle >> 16);
+			  uint16_t q_val = (uint16_t)(pll >> 16);
 			  if(i_val == 0xFFFF) i_val = 0xFFFE;
 			  if(q_val == 0xFFFF) q_val = 0xFFFE;
 
@@ -223,15 +236,6 @@ int main(void)
 			  txBuffer[3] = q_val & 0xFF;
 			  txBuffer+=4;
 
-			  //filter IQ
-			  filteredIQ.i += (afBuffer->i - filteredIQ.i) >> 4;
-			  filteredIQ.q += (afBuffer->q - filteredIQ.q) >> 4;
-
-			  int32_t amSample;
-			  amDetector_detectSample(&filteredIQ,&amSample);
-			  dacOut[dacOutPushed] = (amSample/2) & 0xFFFF;
-			  dacOutPushed++;
-			  if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
 			  afBuffer++;
 		  }

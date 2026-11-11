@@ -10,7 +10,7 @@
 
 
 static uint32_t localOsc = 0;
-static uint32_t localOscSpeed = 0;	//speed in cycles*2^32 perSample (0x80000000 means 0,5 cycles per sample)
+static int32_t localOscSpeed = 0;	//speed in cycles*2^32 perSample (0x80000000 means 0,5 cycles per sample)
 static int32_t phaseErrorFiltered = 0;
 static int32_t phaseLockCounter = 0;
 static uint32_t phaseLocked = 0;
@@ -21,43 +21,51 @@ void pll_init(uint32_t _sampleRate, uint32_t _initFreq)
 	localOscSpeed = (uint64_t)(_initFreq*0x100000000)/_sampleRate;
 }
 
-int32_t pll_detect(uint32_t angle)
+uint32_t pll_detect(uint32_t angle)
 {
-	// advance local oscillator
-	localOsc += localOscSpeed;
-
 	// calculate error between input and local osc
 	int32_t phaseError = angle - localOsc;
 
-	// apply simple low-pass filter
-	phaseErrorFiltered += (phaseError - phaseErrorFiltered) >> 4;
+	// rotate local oscillator
+	localOsc += localOscSpeed;
 
-	int32_t phaseErrorFilteredAmpilfied = phaseErrorFiltered * 2;
-
-	//more aggressive gain if we are not in sync
-//	if (!phaseLocked)
-//		phaseErrorFilteredAmpilfied *= 10;
-
-	//apply speed correction
-	// positive phaseError means angle > localOsc -> increase speed
-	localOscSpeed += phaseErrorFilteredAmpilfied;
-
-	// detect how long we are in sync
-	if (abs(phaseErrorFiltered) < 100) {
-		if (phaseLockCounter < 10000) phaseLockCounter++;
+	// count tune-in/out
+	if (abs(phaseErrorFiltered) < 0xB000000) {
+		// in-phase
+		if (phaseLockCounter > 30000) {
+			phaseLocked = 1;
+			HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+		} else {
+			phaseLockCounter++;
+		}
 	} else {
-		if (phaseLockCounter > 10) phaseLockCounter -=3;
+		// out-of-phase
+		if (phaseLockCounter < 100) {
+			phaseLocked = 0;
+			HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+		} else {
+			phaseLockCounter--;
+		}
 	}
 
-	// toggle phaseLocked if we are far in sync / out of sync
-	if (phaseLockCounter > 8000) {
-		phaseLocked = 1;
-		HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-	}
-	if (phaseLockCounter < 100) {
-		phaseLocked = 0;
-		HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
-	}
+	if (phaseLocked) {
+		phaseErrorFiltered += (phaseError - phaseErrorFiltered) >> 6;
 
-	return phaseError;
+		// perform asymetric regulation -> positive error has smaller power than negative
+		// it prevents phase modulation to tune-off PLL too mucj
+		if (phaseErrorFiltered > 0x10000) {
+			localOsc += phaseErrorFiltered >> 20;
+			localOscSpeed += phaseErrorFiltered >> 26;
+		} else {
+			localOsc += phaseErrorFiltered >> 10;
+			localOscSpeed += phaseErrorFiltered >> 24;
+		}
+	} else {
+		// more aggresive regulation
+		phaseErrorFiltered += (phaseError - phaseErrorFiltered) >> 4;
+		localOsc += phaseErrorFiltered >> 10;
+		localOscSpeed += phaseErrorFiltered >> 24;
+
+	}
+	return localOsc;
 }
