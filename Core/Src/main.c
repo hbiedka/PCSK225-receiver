@@ -28,6 +28,7 @@
 #include "detectors/am.h"
 #include "detectors/arctg2.h"
 #include "detectors/pll.h"
+#include "detectors/phaseMod.h"
 
 #include "filters/dcOffset.h"
 
@@ -49,6 +50,8 @@
 #define INPUT_HALF_SAMPLES INPUT_SAMPLES/2
 
 #define RF_IF_DECIMATION_POW2	8	//=256
+
+#define AF_SAMPLE_RATE (RF_SAMPLE_RATE>>RF_IF_DECIMATION_POW2)
 
 #define AF_SAMPLES (INPUT_SAMPLES>>RF_IF_DECIMATION_POW2)
 #define AF_HALF_SAMPLES AF_SAMPLES/2
@@ -184,6 +187,7 @@ int main(void)
   //init detectors
   amDetector_init();
   pll_init(RF_SAMPLE_RATE,0);
+  phaseMod_init(AF_SAMPLE_RATE,50);
 
   /* USER CODE END 2 */
 
@@ -215,7 +219,6 @@ int main(void)
 			  filteredIQ.i += (afBuffer->i - filteredIQ.i) >> 4;
 			  filteredIQ.q += (afBuffer->q - filteredIQ.q) >> 4;
 
-
 			  int32_t amSample;
 			  amDetector_detectSample(&filteredIQ,&amSample);
 			  dacOut[dacOutPushed] = (amSample/2) & 0xFFFF;
@@ -225,8 +228,11 @@ int main(void)
 			  uint32_t angle = IQarctg2(&filteredIQ);
 			  uint32_t pll = pll_detect(angle);
 
-			  uint16_t i_val = (uint16_t)(angle >> 16);
-			  uint16_t q_val = (uint16_t)(pll >> 16);
+			  int32_t phaseMod = angle - pll;
+			  uint16_t phaseModRet = (uint16_t)phaseMod_push(phaseMod);
+
+			  uint16_t i_val = (uint16_t)(phaseMod >> 16);
+			  uint16_t q_val = (uint16_t)(phaseModRet << 12);
 			  if(i_val == 0xFFFF) i_val = 0xFFFE;
 			  if(q_val == 0xFFFF) q_val = 0xFFFE;
 
