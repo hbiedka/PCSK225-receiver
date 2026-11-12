@@ -98,6 +98,16 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 					ret = DETECT_ZERO;
 				}
 
+				// sanity check: first bits should be syncronising preamble (1010101)
+				// if not, it was false detector trigger
+				if (bitCnt > 0 && bitCnt < 6) {
+					if (bits[bitCnt-1] == bits[bitCnt]) {
+						ret = FAIL_INVALID_PREAMBLE;
+						state = WAIT;
+						break;
+					}
+				}
+
 				bitCnt++;
 				if (bitCnt >= BIT_NUM)
 					//success

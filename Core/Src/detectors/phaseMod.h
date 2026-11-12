@@ -15,7 +15,8 @@ typedef enum {
 	FOUND_SYNC_ONE,
 	DETECT_ZERO,
 	DETECT_ONE,
-	FULL_FRAME_RECVD
+	FULL_FRAME_RECVD,
+	FAIL_INVALID_PREAMBLE
 } phaseModReturn_t;
 
 void phaseMod_init(uint32_t sampleRate, uint32_t baudRate);
