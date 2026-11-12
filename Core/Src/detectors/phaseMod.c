@@ -8,21 +8,19 @@
 #include "phaseMod.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 
 #define BIT_NUM 96
 #define BUFFER_SIZE 200
 
 const int32_t triangleWidth = 100;
 
-//TODO initialize and malloc circBuf base on sample rate
 int32_t circBuf[BUFFER_SIZE];
 size_t circBufPtr = 0;
 
 uint32_t baudratePeriod = 176; 	//8789.0625/50 (samples per second/bits per second -> samples/bit)
 
 size_t sampleCnt = 0;
-int8_t bits[BIT_NUM];
+uint8_t bits[BIT_NUM];
 size_t bitCnt = 0;
 
 int32_t lastOne = 0;
@@ -40,6 +38,11 @@ void phaseMod_init(uint32_t sampleRate, uint32_t baudRate)
 
 	//division correction
 	if ((sampleRate % baudRate) > (baudRate/2))baudratePeriod++;
+}
+
+uint8_t* phaseMod_getBitstream(size_t *size) {
+	if (size) *size = BIT_NUM;
+	return bits;
 }
 
 phaseModReturn_t phaseMod_push(int32_t sample)

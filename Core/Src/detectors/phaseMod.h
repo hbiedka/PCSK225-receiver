@@ -21,4 +21,7 @@ typedef enum {
 
 void phaseMod_init(uint32_t sampleRate, uint32_t baudRate);
 phaseModReturn_t phaseMod_push(int32_t sample);
+
+uint8_t* phaseMod_getBitstream(size_t* size);
+
 #endif /* SRC_DETECTORS_PHASEMOD_H_ */
