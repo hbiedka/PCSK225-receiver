@@ -59,6 +59,9 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 	switch(state) {
 		case WAIT:
 
+			// find phase shift up then down - it means zero from sync preamble
+			// phase shift means zero and no phase shift means one
+
 			posMid = circBufPtr - triangleWidth;
 			if (posMid<0) posMid += BUFFER_SIZE;
 			posBegin = posMid - triangleWidth;
@@ -68,13 +71,13 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 			int32_t sampleMid = circBuf[posMid];
 
 			if (abs(sampleBegin-sample) < 0x800000 && sampleMid-sample > 0xB000000) {
-				ret = FOUND_SYNC_ONE;
+				ret = FOUND_SYNC_ZERO;
 
-				bits[0] = 1;
+				bits[0] = 0;
 				bitCnt = 1;
 
-				lastZero = 0;
-				lastOne = sampleMid;
+				lastZero = sampleMid;
+				lastOne = 0;
 
 				sampleCnt = triangleWidth;
 				state = RECV;
@@ -92,16 +95,16 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 
 				//detect zero or one
 				if (sample > thr) {
-					bits[bitCnt] = 1;
-					lastOne = sample;
-					ret = DETECT_ONE;
-				} else {
 					bits[bitCnt] = 0;
 					lastZero = sample;
 					ret = DETECT_ZERO;
+				} else {
+					bits[bitCnt] = 1;
+					lastOne = sample;
+					ret = DETECT_ONE;
 				}
 
-				// sanity check: first bits should be syncronising preamble (1010101)
+				// sanity check: first bits should be syncronising preamble (01010101)
 				// if not, it was false detector trigger
 				if (bitCnt > 0 && bitCnt < 6) {
 					if (bits[bitCnt-1] == bits[bitCnt]) {
