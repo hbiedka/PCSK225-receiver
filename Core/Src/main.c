@@ -33,6 +33,7 @@
 #include "filters/dcOffset.h"
 
 #include "decoders/pcsk225.h"
+#include "decoders/eczas.h"
 
 /* USER CODE END Includes */
 
@@ -239,11 +240,16 @@ int main(void)
 			  if (phaseModRet == FULL_FRAME_RECVD) {
 				  size_t len = 0;
 				  uint8_t *data = phaseMod_getBitstream(&len);
-				  phaseMod_printBitstream(&huart3);
 
 				  pcsk225Frame pcskData;
 				  pcsk225_decode(data,len,&pcskData);
 				  pcsk225_print(&huart3,&pcskData);
+
+				  if (pcskData.header == 0x60) {
+					  eCzasFrame eCzas;
+					  eCzas_decode(&pcskData,&eCzas);
+					  eCzas_print(&huart3,&eCzas);
+				  }
 
 			  }
 
