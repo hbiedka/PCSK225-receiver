@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
+static char buffer[256];
 
 // convert array of (len*8) bits to (len) bytes
 static void bitstreamToData(uint8_t *bs, size_t numBytes, uint8_t *output)
@@ -63,7 +64,6 @@ int pcsk225_decode(uint8_t *data, size_t len, pcsk225Frame *output)
 
 void pcsk225_print(UART_HandleTypeDef *tty, pcsk225Frame *frame)
 {
-	char buffer[256];
 	size_t cursor = 0;
 
 	snprintf(buffer,sizeof(buffer),":%02X:",frame->header);
@@ -79,3 +79,6 @@ void pcsk225_print(UART_HandleTypeDef *tty, pcsk225Frame *frame)
 	HAL_UART_Transmit_DMA(tty,(uint8_t*)buffer,strnlen(buffer,sizeof(buffer)));
 
 }
+
+
+
