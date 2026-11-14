@@ -23,5 +23,6 @@ typedef struct{
 
 void eCzas_decode(pcsk225Frame *frame, eCzasFrame *output);
 void eCzas_print(UART_HandleTypeDef *tty, eCzasFrame *frame);
+void eCzas_printDate(UART_HandleTypeDef *tty, eCzasFrame *frame);
 
 #endif /* SRC_DECODERS_ECZAS_H_ */

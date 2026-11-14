@@ -249,6 +249,7 @@ int main(void)
 					  eCzasFrame eCzas;
 					  eCzas_decode(&pcskData,&eCzas);
 					  eCzas_print(&huart3,&eCzas);
+					  eCzas_printDate(&huart3,&eCzas);
 				  }
 
 			  }
