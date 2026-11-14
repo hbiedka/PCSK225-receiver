@@ -130,6 +130,16 @@ size_t txDataPushed = 0;
 #define DC_OFFSET_FILTER_WINDOW_ORDER 7		//128
 uint16_t dcOffset;
 
+enum {
+	IDLE,
+	DECODE_PCSK225,
+	DECODE_ECZAS
+} decoderState = IDLE;
+
+pcsk225Frame pcsk;
+eCzasFrame eCzas;
+
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -238,20 +248,8 @@ int main(void)
 			  phaseModReturn_t phaseModRet = (uint16_t)phaseMod_push(phaseMod);
 
 			  if (phaseModRet == FULL_FRAME_RECVD) {
-				  size_t len = 0;
-				  uint8_t *data = phaseMod_getBitstream(&len);
-
-				  pcsk225Frame pcskData;
-				  pcsk225_decode(data,len,&pcskData);
-				  pcsk225_print(&huart3,&pcskData);
-
-				  if (pcskData.header == 0x60) {
-					  eCzasFrame eCzas;
-					  eCzas_decode(&pcskData,&eCzas);
-					  eCzas_print(&huart3,&eCzas);
-					  eCzas_printDate(&huart3,&eCzas);
-				  }
-
+				  //schedule decooding PCSK225 frame
+				  decoderState = DECODE_PCSK225;
 			  }
 
 			  uint16_t i_val = (uint16_t)(phaseMod >> 16);
@@ -282,6 +280,27 @@ int main(void)
 
 		  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
 
+		  // do not do nothing more
+		  continue;
+	  }
+
+	  if (decoderState == DECODE_PCSK225) {
+		  size_t len = 0;
+		  uint8_t *data = phaseMod_getBitstream(&len);
+
+		  pcsk225_decode(data,len,&pcsk);
+		  pcsk225_print(&huart3,&pcsk);
+
+		  if (pcsk.header == 0x60) {
+			  decoderState = DECODE_ECZAS;
+		  } else {
+			  decoderState = IDLE;
+		  }
+	  } else if (decoderState == DECODE_ECZAS) {
+			  eCzas_decode(&pcsk,&eCzas);
+			  eCzas_print(&huart3,&eCzas);
+			  eCzas_printDate(&huart3,&eCzas);
+			  decoderState = IDLE;
 	  }
 
   }
