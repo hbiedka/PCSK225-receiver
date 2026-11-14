@@ -32,6 +32,8 @@
 
 #include "filters/dcOffset.h"
 
+#include "decoders/pcsk225.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -232,7 +234,16 @@ int main(void)
 			  uint32_t pll = pll_detect(angle);
 
 			  int32_t phaseMod = angle - pll;
-			  uint16_t phaseModRet = (uint16_t)phaseMod_push(phaseMod);
+			  phaseModReturn_t phaseModRet = (uint16_t)phaseMod_push(phaseMod);
+
+			  if (phaseModRet == FULL_FRAME_RECVD) {
+				  size_t len = 0;
+				  uint8_t *data = phaseMod_getBitstream(&len);
+				  pcsk225Frame pcskData;
+				  pcsk225_decode(data,len,&pcskData);
+				  pcsk225_print(&huart3,&pcskData);
+
+			  }
 
 			  uint16_t i_val = (uint16_t)(phaseMod >> 16);
 			  uint16_t q_val = (uint16_t)(phaseModRet << 12);
