@@ -18,8 +18,7 @@ typedef struct{
 	int8_t leapSecond;	// leapSecond (-1,0,1)
 	uint8_t timeZoneChange;	// time zone change announced
 	uint8_t txMaintenance;	//announcement of transmitter maintenance break
-	uint8_t reedSolomonCorr[3];
-	uint8_t crc8;
+	uint8_t crc8;		// CRC8 output (0 means success)
 } eCzasFrame;
 
 void eCzas_decode(pcsk225Frame *frame, eCzasFrame *output);
