@@ -7,7 +7,7 @@
 
 #include "phaseMod.h"
 #include <stdlib.h>
-#include <stdio.h>
+#include <string.h>
 
 #define BIT_NUM 96
 #define BUFFER_SIZE 200
@@ -25,6 +25,10 @@ size_t bitCnt = 0;
 
 int32_t lastOne = 0;
 int32_t lastZero = 0;
+
+// must be static to be consistend while sending data via uart async-ly
+static char buffer[BIT_NUM+4];
+
 
 enum {
 	WAIT,
@@ -133,4 +137,20 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 	return ret;
 }
 
+void phaseMod_printBitstream(UART_HandleTypeDef *tty)
+{
+	char *bufPos = buffer;
+
+	*bufPos++ = '>';
+	for (size_t i = 0; i < BIT_NUM; i++) {
+		*bufPos++ = '0' + bits[i];
+	}
+
+	*bufPos++ = '\r';
+	*bufPos++ = '\n';
+	*bufPos++ = '\0';
+
+	while (tty->gState != HAL_UART_STATE_READY);
+	HAL_UART_Transmit_DMA(tty,(uint8_t*)buffer,strnlen(buffer,sizeof(buffer)));
+}
 
