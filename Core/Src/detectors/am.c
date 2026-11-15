@@ -21,8 +21,8 @@ void amDetector_init(void)
 
 void amDetector_detectSample(struct IQ *input, int32_t *output)
 {
-	int32_t I = input->i >> 8;
-	int32_t Q = input->q >> 8;
+	int32_t I = input->i >> 9;
+	int32_t Q = input->q >> 9;
 	I *= I;
 	Q *= Q;
 
