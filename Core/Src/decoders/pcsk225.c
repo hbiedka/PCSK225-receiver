@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static char buffer[256];
+static char buffer[128];
 
 // convert array of (len*8) bits to (len) bytes
 static void bitstreamToData(uint8_t *bs, size_t numBytes, uint8_t *output)

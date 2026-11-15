@@ -11,7 +11,7 @@
 
 #define CRC8_POLY 0x07
 
-static char buffer[256];
+static char buffer[128];
 
 // scrambling magic (ASCII "\NGUM+") used to scramble
 uint8_t scrambleMagic[5] = {0x0A,0x47,0x55,0x4D,0x2B};
