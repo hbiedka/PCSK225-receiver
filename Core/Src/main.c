@@ -31,6 +31,7 @@
 #include "detectors/phaseMod.h"
 
 #include "filters/dcOffset.h"
+#include "filters/agc.h"
 
 #include "decoders/pcsk225.h"
 #include "decoders/eczas.h"
@@ -130,6 +131,10 @@ size_t txDataPushed = 0;
 #define DC_OFFSET_FILTER_WINDOW_ORDER 7		//128
 uint16_t dcOffset;
 
+#define AGC_FILTER_WINDOW_ORDER 8		//256
+uint32_t agc;
+uint32_t fakeAgc = 500;
+
 enum {
 	IDLE,
 	DECODE_PCSK225,
@@ -193,6 +198,7 @@ int main(void)
 
   //init filters
   dcOffset_init(DC_OFFSET_FILTER_WINDOW_ORDER);
+  agc_init(AGC_FILTER_WINDOW_ORDER);
   filteredIQ.i = 0;
   filteredIQ.q = 0;
 
@@ -224,6 +230,9 @@ int main(void)
 		  // update dcOffset
 		  dcOffset = dcOffset_filter(*rfFrameBegin);
 
+		  //update AGC
+		  agc = agc_update(*rfFrameBegin-dcOffset);
+
 		  txData[0] = 0xFF;
 		  txData[1] = 0xFF;
 		  uint8_t *txBuffer = txData+2;
@@ -231,13 +240,17 @@ int main(void)
 		  struct IQ *afBuffer = afBufferBegin;
 		  while(afBuffer < afBufferEnd) {
 
+			  // Automatic gain control
+			  int32_t I = afBuffer->i * agc;
+			  int32_t Q = afBuffer->q * agc;
+
 			  //filter IQ
-			  filteredIQ.i += (afBuffer->i - filteredIQ.i) >> 4;
-			  filteredIQ.q += (afBuffer->q - filteredIQ.q) >> 4;
+			  filteredIQ.i += (I - filteredIQ.i) >> 4;
+			  filteredIQ.q += (Q - filteredIQ.q) >> 4;
 
 			  int32_t amSample;
 			  amDetector_detectSample(&filteredIQ,&amSample);
-			  dacOut[dacOutPushed] = (amSample/2) & 0xFFFF;
+			  dacOut[dacOutPushed] = (amSample >> 8) & 0xFFFF;
 			  dacOutPushed++;
 			  if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
@@ -252,8 +265,8 @@ int main(void)
 				  decoderState = DECODE_PCSK225;
 			  }
 
-			  uint16_t i_val = (uint16_t)(phaseMod >> 16);
-			  uint16_t q_val = (uint16_t)(phaseModRet << 12);
+			  uint16_t i_val = (uint16_t)((afBuffer->i >> 8) & 0xFFFF);
+			  uint16_t q_val = (uint16_t)((afBuffer->q >> 8) & 0xFFFF);
 			  if(i_val == 0xFFFF) i_val = 0xFFFE;
 			  if(q_val == 0xFFFF) q_val = 0xFFFE;
 

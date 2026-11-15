@@ -11,6 +11,7 @@
 
 uint32_t sampleRate;
 static size_t downsampleRatioPow2;
+static size_t downsampleShift;
 static size_t downsampleRatio;
 static size_t phaseAcc;
 static size_t phaseAccStep;
@@ -24,6 +25,10 @@ void ifMix_init(uint32_t _sampleRate, uint32_t _downsampleRatioPow2, uint16_t *_
 	sampleRate = _sampleRate;
 	downsampleRatioPow2 = _downsampleRatioPow2;
 	downsampleRatio = 1 << downsampleRatioPow2;
+
+	// downsample shift causes output samples 4x smaller than average to provide bit space for AGC
+	downsampleShift = downsampleRatioPow2 + 2;
+
 	dcOffset = _dcOffset;
 }
 
@@ -59,8 +64,8 @@ void ifMix_Mix(const uint16_t *inputBegin, const uint16_t *inputEnd, struct IQ *
 		}
 
 		// calculate average
-		outSample->i = Isum >> downsampleRatioPow2;
-		outSample->q = Qsum >> downsampleRatioPow2;
+		outSample->i = Isum >> downsampleShift;
+		outSample->q = Qsum >> downsampleShift;
 		outSample++;
 
 	}
