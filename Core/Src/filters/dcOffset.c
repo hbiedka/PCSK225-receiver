@@ -18,7 +18,7 @@ static uint16_t *bufferBegin = 0;
 static uint16_t *bufferEnd = 0;
 static uint16_t *bufferCurrentSample = 0;
 
-uint8_t windowLenOrder = 0;
+static uint8_t windowLenOrder = 0;
 
 void dcOffset_init(uint8_t _windowLenOrder)
 {
@@ -26,7 +26,7 @@ void dcOffset_init(uint8_t _windowLenOrder)
 	size_t windowLen = 1 << windowLenOrder;
 
 	//initialize circular buffer
-	bufferBegin = malloc(windowLen);
+	bufferBegin = malloc(windowLen*sizeof(uint16_t));
 	bufferEnd = bufferBegin + windowLen;
 
 	  //initialize circullar buffer
