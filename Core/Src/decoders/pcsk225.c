@@ -26,7 +26,7 @@ static void bitstreamToData(uint8_t *bs, size_t numBytes, uint8_t *output)
     }
 }
 
-int pcsk225_decode(uint8_t *data, size_t len, pcsk225Frame *output)
+int pcsk225_decode(uint8_t *data, size_t len, pcsk225Frame *output, size_t *headerOffset)
 {
 	if (!output)
 		return -1;
@@ -58,6 +58,13 @@ int pcsk225_decode(uint8_t *data, size_t len, pcsk225Frame *output)
 
 	output->header = header;
 	bitstreamToData(&data[headerStart+8],9,output->payload);
+
+	if (headerOffset) {
+		//share header offset (num of sync bits skipped)
+		// it is necessary for calculating time between first sync bit and frame received
+		// for precise time sync
+		*headerOffset = 16 - headerStart;
+	}
 
 	return 0;
 }

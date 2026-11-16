@@ -32,8 +32,7 @@ static char buffer[BIT_NUM+4];
 
 enum {
 	WAIT,
-	RECV,
-	FRAME_END
+	RECV
 } state = WAIT;
 
 void phaseMod_init(uint32_t sampleRate, uint32_t baudRate)
@@ -119,16 +118,13 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 				}
 
 				bitCnt++;
-				if (bitCnt >= BIT_NUM)
+				if (bitCnt >= BIT_NUM) {
 					//success
-					state = FRAME_END;
+					ret = FULL_FRAME_RECVD;
+					state = WAIT;
+				}
 			}
 
-			break;
-		case FRAME_END:
-			// only to confirm that frame was fully received
-			ret = FULL_FRAME_RECVD;
-			state = WAIT;
 			break;
 		default:
 			state = WAIT;

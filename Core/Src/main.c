@@ -301,7 +301,7 @@ int main(void)
 		  size_t len = 0;
 		  uint8_t *data = phaseMod_getBitstream(&len);
 
-		  pcsk225_decode(data,len,&pcsk);
+		  pcsk225_decode(data,len,&pcsk,0);
 		  pcsk225_print(&huart3,&pcsk);
 
 		  if (pcsk.header == 0x60) {
