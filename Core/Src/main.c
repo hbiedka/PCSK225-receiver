@@ -114,10 +114,12 @@ uint16_t rf[INPUT_SAMPLES];
 
 uint16_t *rfFrameBegin = rf;
 uint16_t *rfFrameHalf = &rf[INPUT_HALF_SAMPLES];
-uint16_t *rfFrameEnd = &rf[INPUT_SAMPLES];
 
-volatile size_t ifBufferLastUpdate = 0xFFFFFFFF;
-size_t ifBufferPrevUpdate = 0xFFFFFFFF;
+// these variables are updated from ADC full/half complete interrupts
+volatile size_t rfFrameUpdated = INPUT_SAMPLES;
+volatile size_t afFrameToUpdate = 0;
+
+size_t rfFrameLastUpdated = 0;
 
 //AF I and Q
 struct IQ af_IQ[AF_SAMPLES];
@@ -229,10 +231,13 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-	  if (ifBufferLastUpdate != 0xFFFFFFFF && ifBufferLastUpdate != ifBufferPrevUpdate) {
+	  // check first if rfFrameUpdated does not overflow RF array
+	  if (rfFrameUpdated < INPUT_SAMPLES && rfFrameUpdated != rfFrameLastUpdated) {
 
-		  struct IQ *afBufferBegin = &af_IQ[ifBufferLastUpdate];
-		  struct IQ *afBufferEnd = &af_IQ[ifBufferLastUpdate+AF_HALF_SAMPLES];
+		  struct IQ *afBufferBegin = &af_IQ[afFrameToUpdate];
+		  struct IQ *afBufferEnd = &af_IQ[afFrameToUpdate+AF_HALF_SAMPLES];
+
+		  ifMix_Mix(&rf[rfFrameUpdated], &rf[rfFrameUpdated+INPUT_HALF_SAMPLES],afBufferBegin);
 
 		  // update dcOffset
 		  dcOffset = dcOffset_filter(*rfFrameBegin);
@@ -299,7 +304,7 @@ int main(void)
 		  if(afCurrentFrame >= afFrameEnd) afCurrentFrame = afFrameBegin;
 
 		  //IF buffer swap to wait from next update from ISR
-		  ifBufferPrevUpdate = ifBufferLastUpdate;
+		  rfFrameLastUpdated = rfFrameUpdated;
 
 		  // do not do nothing more
 		  continue;
@@ -824,13 +829,13 @@ static void MX_GPIO_Init(void)
 
 // Called when buffer is completely filled
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
-	ifMix_Mix(rfFrameBegin, rfFrameHalf,afFrameBegin);
-	ifBufferLastUpdate = 0;
+	rfFrameUpdated = 0;
+	afFrameToUpdate = 0;
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-	ifMix_Mix(rfFrameHalf,rfFrameEnd,afFrameHalf);
-	ifBufferLastUpdate = AF_HALF_SAMPLES;
+	rfFrameUpdated = INPUT_HALF_SAMPLES;
+	afFrameToUpdate = AF_HALF_SAMPLES;
 }
 /* USER CODE END 4 */
 
