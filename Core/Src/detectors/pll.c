@@ -34,7 +34,8 @@ uint32_t pll_detect(uint32_t angle)
 		// in-phase
 		if (phaseLockCounter > 30000) {
 			phaseLocked = 1;
-			HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+			// Carrier led ON
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
 		} else {
 			phaseLockCounter++;
 		}
@@ -42,7 +43,8 @@ uint32_t pll_detect(uint32_t angle)
 		// out-of-phase
 		if (phaseLockCounter < 100) {
 			phaseLocked = 0;
-			HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+			// Carrier led OFF
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
 		} else {
 			phaseLockCounter--;
 		}

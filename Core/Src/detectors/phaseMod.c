@@ -29,11 +29,13 @@ int32_t lastZero = 0;
 // must be static to be consistend while sending data via uart async-ly
 static char buffer[BIT_NUM+4];
 
-
-enum {
+typedef enum {
 	WAIT,
 	RECV
-} state = WAIT;
+} state_t;
+
+static state_t state = WAIT;
+static state_t prevState = WAIT;
 
 void phaseMod_init(uint32_t sampleRate, uint32_t baudRate)
 {
@@ -128,6 +130,13 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 			break;
 		default:
 			state = WAIT;
+	}
+
+	if (prevState != state) {
+		//state changed - deal with RX led
+		if (state == RECV) HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);
+		else if (state == WAIT) HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+		prevState = state;
 	}
 
 	return ret;
