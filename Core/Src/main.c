@@ -262,14 +262,17 @@ int main(void)
 			  if(dacOutPushed >= OUTPUT_SAMPLES) dacOutPushed = 0;
 
 			  uint32_t angle = IQarctg2(&filteredIQ);
-			  uint32_t pll = pll_detect(angle);
+			  uint32_t pll = 0;
+			  uint32_t phaseLocked = pll_detect(angle,&pll);
 
-			  int32_t phaseMod = angle - pll;
-			  phaseModReturn_t phaseModRet = (uint16_t)phaseMod_push(phaseMod);
+			  if (phaseLocked) {
+				  int32_t phaseMod = angle - pll;
+				  phaseModReturn_t phaseModRet = (uint16_t)phaseMod_push(phaseMod);
 
-			  if (phaseModRet == FULL_FRAME_RECVD) {
-				  //schedule decooding PCSK225 frame
-				  decoderState = DECODE_PCSK225;
+				  if (phaseModRet == FULL_FRAME_RECVD) {
+					  //schedule decooding PCSK225 frame
+					  decoderState = DECODE_PCSK225;
+				  }
 			  }
 
 			  uint16_t i_val = (uint16_t)((afBuffer->i >> 8) & 0xFFFF);

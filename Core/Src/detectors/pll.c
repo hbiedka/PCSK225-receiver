@@ -21,7 +21,7 @@ void pll_init(uint32_t _sampleRate, uint32_t _initFreq)
 	localOscSpeed = (uint64_t)(_initFreq*0x100000000)/_sampleRate;
 }
 
-uint32_t pll_detect(uint32_t angle)
+uint32_t pll_detect(uint32_t angle, uint32_t *output)
 {
 	// calculate error between input and local osc
 	int32_t phaseError = angle - localOsc;
@@ -69,5 +69,8 @@ uint32_t pll_detect(uint32_t angle)
 		localOscSpeed += phaseErrorFiltered >> 24;
 
 	}
-	return localOsc;
+	if (output)
+		*output = localOsc;
+
+	return phaseLocked;
 }

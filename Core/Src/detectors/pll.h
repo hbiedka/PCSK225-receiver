@@ -11,7 +11,7 @@
 #include "main.h"
 
 void pll_init(uint32_t _sampleRate, uint32_t _initFreq);
-uint32_t pll_detect(uint32_t angle);
+uint32_t pll_detect(uint32_t angle, uint32_t *output);
 
 int32_t getAngleError(uint32_t angle);
 
