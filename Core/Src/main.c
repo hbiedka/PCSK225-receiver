@@ -280,8 +280,9 @@ int main(void)
 				  }
 			  }
 
-			  uint16_t i_val = (uint16_t)((afBuffer->i >> 8) & 0xFFFF);
-			  uint16_t q_val = (uint16_t)((afBuffer->q >> 8) & 0xFFFF);
+			  // GNU radio output
+			  uint16_t i_val = (uint16_t)((afBuffer->i >> 4) & 0xFFFF);
+			  uint16_t q_val = (uint16_t)((afBuffer->q >> 4) & 0xFFFF);
 			  if(i_val == 0xFFFF) i_val = 0xFFFE;
 			  if(q_val == 0xFFFF) q_val = 0xFFFE;
 
