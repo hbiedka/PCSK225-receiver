@@ -31,7 +31,8 @@ static char buffer[BIT_NUM+4];
 
 typedef enum {
 	WAIT,
-	RECV
+	RECV_UNSTABLE,
+	RECV_STABLE
 } state_t;
 
 static state_t state = WAIT;
@@ -85,11 +86,12 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 				lastOne = 0;
 
 				sampleCnt = triangleWidth;
-				state = RECV;
+				state = RECV_UNSTABLE;
 			}
 			break;
 
-		case RECV:
+		case RECV_UNSTABLE:
+		case RECV_STABLE:
 			sampleCnt++;
 
 			if (sampleCnt >= baudratePeriod) {
@@ -117,6 +119,8 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 						state = WAIT;
 						break;
 					}
+				} else {
+					state = RECV_STABLE;
 				}
 
 				bitCnt++;
@@ -134,8 +138,8 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 
 	if (prevState != state) {
 		//state changed - deal with RX led
-		if (state == RECV) HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);
-		else if (state == WAIT) HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+		if (state == RECV_STABLE) HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);
+		else HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
 		prevState = state;
 	}
 
