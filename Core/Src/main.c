@@ -307,7 +307,7 @@ int main(void)
 		  uint8_t *data = phaseMod_getBitstream(&len);
 
 		  pcsk225_decode(data,len,&pcsk,0);
-		  pcsk225_print(&huart3,&pcsk);
+		  pcsk225_print(&huart1,&pcsk);
 
 		  if (pcsk.header == 0x60) {
 			  decoderState = DECODE_ECZAS;
@@ -316,8 +316,8 @@ int main(void)
 		  }
 	  } else if (decoderState == DECODE_ECZAS) {
 			  eCzas_decode(&pcsk,&eCzas);
-			  eCzas_print(&huart3,&eCzas);
-			  eCzas_printDate(&huart3,&eCzas);
+			  eCzas_print(&huart1,&eCzas);
+			  eCzas_printDate(&huart1,&eCzas);
 			  decoderState = IDLE;
 	  }
 
