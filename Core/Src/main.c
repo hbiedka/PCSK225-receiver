@@ -333,7 +333,6 @@ int main(void)
 	  } else if (decoderState == DECODE_ECZAS) {
 			  eCzas_decode(&pcsk,&eCzas);
 			  eCzas_print(&huart1,&eCzas);
-			  eCzas_printDate(&huart1,&eCzas);
 			  decoderState = IDLE;
 	  }
 
