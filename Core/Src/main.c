@@ -143,7 +143,6 @@ uint16_t dcOffset;
 
 #define AGC_FILTER_WINDOW_ORDER 8		//256
 uint32_t agc;
-uint32_t fakeAgc = 500;
 
 enum {
 	IDLE,
