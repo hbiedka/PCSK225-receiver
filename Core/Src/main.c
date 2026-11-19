@@ -157,12 +157,32 @@ enum {
 pcsk225Frame pcsk;
 eCzasFrame eCzas;
 
-
 // master timer (seconds from 2000), update from timer irq
 volatile uint32_t mstTimer = 0;
 
-// flag that tick happened (set from timer irq, reset by loop
-uint32_t wasTick = 0;
+// flag that tick happened (set from timer irq, reset by loop)
+volatile uint32_t wasTick = 0;
+
+// flag that was sync interrupt (set from sync timer irq, reset by loop)
+volatile uint32_t wasSyncIRQ = 0;
+
+// flag that locks resetting sync timer if started to receive sync frame
+volatile uint32_t lockSyncTimerReset = 0;
+
+// flag that occurs that we have recived legit eCzas frame and will be used to sync
+volatile uint32_t eczasFrameRecvd = 0;
+
+
+// sync status
+enum {
+	INIT_NO_SYNC,
+	SYNCED,
+	SYNC_LOST
+} syncState = INIT_NO_SYNC;
+
+// timestamp of last sync	(0 means no sync)
+uint32_t lastSyncAt = 0;
+
 
 /* USER CODE END PFP */
 
@@ -295,9 +315,17 @@ int main(void)
 				  int32_t phaseMod = angle - pll;
 				  phaseModReturn_t phaseModRet = (uint16_t)phaseMod_push(phaseMod);
 
-				  if (phaseModRet == FULL_FRAME_RECVD) {
+				  if (phaseModRet == FOUND_SYNC_ZERO) {
+					  // TODO calculate time diff
+
+					  // lock timer resetting by ADC callbacks
+					  lockSyncTimerReset = 1;
+				  } else if (phaseModRet == FULL_FRAME_RECVD) {
 					  //schedule decooding PCSK225 frame
 					  decoderState = DECODE_PCSK225;
+				  } else if (phaseModRet == FAIL_INVALID_PREAMBLE) {
+					  // corrupted frame, reset timer
+					  lockSyncTimerReset = 0;
 				  }
 			  }
 
@@ -347,6 +375,15 @@ int main(void)
 	  } else if (decoderState == DECODE_ECZAS) {
 			  eCzas_decode(&pcsk,&eCzas);
 			  eCzas_print(&huart1,&eCzas);
+
+			  if (eCzas_verify(&eCzas)) {
+				  // we have received legit frame
+				  eczasFrameRecvd = 1;
+			  } else {
+				  //cancel timer lock
+				  lockSyncTimerReset = 0;
+			  }
+
 			  decoderState = IDLE;
 	  }
 
@@ -356,7 +393,24 @@ int main(void)
 		  // send timestamp over NMEA interface (every 10 secs)
 		  if (mstTimer % 10 == 0)
 			  nmea_sendGPRMCFromTimestamp(&huart1,mstTimer);
+	  } else if (wasSyncIRQ) {
+		  wasSyncIRQ = 0;
 
+		  // sync timers
+		  if (eczasFrameRecvd) {
+			  eczasFrameRecvd = 0;
+
+			  // received frame describes the time which was
+			  // 2 secs (timer period) + time diff ( <1s, loaded to PPS timer)
+			  mstTimer = eCzas.counter*3 + 2;
+
+			  // set sync flags
+			  lastSyncAt = mstTimer;
+			  syncState = SYNCED;
+		  }
+
+		  //unlock sync timer resets
+		  lockSyncTimerReset = 0;
 	  }
 
   }
@@ -967,19 +1021,36 @@ static void MX_GPIO_Init(void)
 
 // Called when buffer is completely filled
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
+	// reset sync timer until not locked while time frame received
+	if (!lockSyncTimerReset) __HAL_TIM_SET_COUNTER(&htim1, 0);
+
 	rfFrameUpdated = 0;
 	afFrameToUpdate = 0;
 
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+	// reset sync timer until not locked while time frame received
+	if (!lockSyncTimerReset) __HAL_TIM_SET_COUNTER(&htim1, 0);
+
 	rfFrameUpdated = INPUT_HALF_SAMPLES;
 	afFrameToUpdate = AF_HALF_SAMPLES;
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-	if (htim->Instance != TIM2) return;
-	mstTimer++;
-	wasTick = 1;
+	if (htim->Instance == TIM2) {
+		// 1PPS timer
+		mstTimer++;
+		wasTick = 1;
+	} else if (htim->Instance == TIM1 ) {
+		// sync timer
+
+		// TODO load proper value, calculated as diff from real sync
+		// to ADC callback
+		__HAL_TIM_SET_COUNTER(&htim2, 0);
+
+		wasSyncIRQ = 1;
+	}
+
 }
 /* USER CODE END 4 */
 
