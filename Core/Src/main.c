@@ -24,6 +24,8 @@
 #include <math.h>
 
 #include "iq.h"
+
+#include "datetime/nmea.h"
 #include "mixers/ifMix.h"
 #include "detectors/am.h"
 #include "detectors/arctg2.h"
@@ -154,6 +156,12 @@ pcsk225Frame pcsk;
 eCzasFrame eCzas;
 
 
+// master timer (seconds from 2000), update from timer irq
+volatile uint32_t mstTimer = 0;
+
+// flag that tick happened (set from timer irq, reset by loop
+uint32_t wasTick = 0;
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -227,6 +235,7 @@ int main(void)
   //TODO do not generate PWM until synced
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
   __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 3600000);
+  __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
 
   /* USER CODE END 2 */
 
@@ -334,6 +343,15 @@ int main(void)
 			  eCzas_decode(&pcsk,&eCzas);
 			  eCzas_print(&huart1,&eCzas);
 			  decoderState = IDLE;
+	  }
+
+	  if (wasTick) {
+		  wasTick = 0;
+
+		  // send timestamp over NMEA interface (every 10 secs)
+		  if (mstTimer % 10 == 0)
+			  nmea_sendGPRMCFromTimestamp(&huart1,mstTimer);
+
 	  }
 
   }
@@ -902,6 +920,12 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	rfFrameUpdated = INPUT_HALF_SAMPLES;
 	afFrameToUpdate = AF_HALF_SAMPLES;
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+	if (htim->Instance != TIM2) return;
+	mstTimer++;
+	wasTick = 1;
 }
 /* USER CODE END 4 */
 
