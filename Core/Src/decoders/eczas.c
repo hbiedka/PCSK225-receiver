@@ -91,6 +91,13 @@ void eCzas_decode(pcsk225Frame *pcsk, eCzasFrame *frame)
 	//CRC8
 	frame->crc8 = crc8(pcsk->payload,5,pcsk->payload[8]);
 }
+
+int eCzas_verify(eCzasFrame *frame) {
+	// check if CRC8 is 0
+	return frame->crc8 ? 0 : 1;
+}
+
+
 void eCzas_print(UART_HandleTypeDef *tty, eCzasFrame *frame)
 {
 	DateTime dt;

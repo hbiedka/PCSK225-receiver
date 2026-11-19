@@ -22,6 +22,7 @@ typedef struct{
 } eCzasFrame;
 
 void eCzas_decode(pcsk225Frame *frame, eCzasFrame *output);
+int eCzas_verify(eCzasFrame *frame);
 void eCzas_print(UART_HandleTypeDef *tty, eCzasFrame *frame);
 void eCzas_printDate(UART_HandleTypeDef *tty, eCzasFrame *frame);
 
