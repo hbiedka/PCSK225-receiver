@@ -683,7 +683,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 7999;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 17999;
+  htim1.Init.Period = 18000;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -1078,10 +1078,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		wasTick = 1;
 	} else if (htim->Instance == TIM1 ) {
 		// sync timer
-		// now we are 2 secs (interrupt period) + syncTimerOffset samples from sync time
+		// now we are 2 secs + 8000 ticks (interrupt period) + syncTimerOffset samples from sync time.
 		// so we add 2 seconds to timestamp received from eCzas frame (done in main loop)
 		// also we need to push PPS timer by some extra time forward, which happens here
-		__HAL_TIM_SET_COUNTER(&htim2, syncTimerOffset*AF_TICKS_PER_SAMPLE);
+		__HAL_TIM_SET_COUNTER(&htim2, 8000+syncTimerOffset*AF_TICKS_PER_SAMPLE);
 
 		wasSyncIRQ = 1;
 	}
