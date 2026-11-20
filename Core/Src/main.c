@@ -346,6 +346,9 @@ int main(void)
 					  // corrupted frame, reset timer
 					  lockSyncTimerReset = 0;
 				  }
+			  } else {
+				  // reset phaseMod internal state machine and Carrier LED
+				  phaseMod_cancel();
 			  }
 
 			  // GNU radio output

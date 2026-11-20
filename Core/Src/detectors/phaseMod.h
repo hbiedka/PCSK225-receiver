@@ -21,6 +21,7 @@ typedef enum {
 
 uint32_t phaseMod_init(uint32_t sampleRate, uint32_t baudRate, uint32_t syncBitWidth);
 phaseModReturn_t phaseMod_push(int32_t sample);
+void phaseMod_cancel();
 
 uint8_t* phaseMod_getBitstream(size_t* size);
 void phaseMod_printBitstream(UART_HandleTypeDef *tty);

@@ -38,6 +38,15 @@ typedef enum {
 static state_t state = WAIT;
 static state_t prevState = WAIT;
 
+static void driveCarrierLED() {
+	if (prevState != state) {
+		//state changed - deal with RX led
+		if (state == RECV_STABLE) HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);
+		else HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+		prevState = state;
+	}
+}
+
 uint32_t phaseMod_init(uint32_t sampleRate, uint32_t baudRate, uint32_t syncBitWidth)
 {
 	baudratePeriod = sampleRate/baudRate;
@@ -139,15 +148,17 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 			state = WAIT;
 	}
 
-	if (prevState != state) {
-		//state changed - deal with RX led
-		if (state == RECV_STABLE) HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);
-		else HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
-		prevState = state;
-	}
-
+	//update Carrrier LED
+	driveCarrierLED();
 	return ret;
 }
+
+void phaseMod_cancel()
+{
+	state = WAIT;
+	driveCarrierLED();
+}
+
 
 void phaseMod_printBitstream(UART_HandleTypeDef *tty)
 {
