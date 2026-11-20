@@ -438,12 +438,27 @@ int main(void)
 		  lockSyncTimerReset = 0;
 	  }
 
+	  // Sync status state machine
+	  if (syncState == INIT_NO_SYNC && mstTimer > 180) {
+		  // not synced from 3 minutes
+		  syncState = SYNC_LOST;
+	  } else if (syncState == SYNCED) {
+		  int32_t timeFromLastSync = mstTimer - lastSyncAt;
+		  if (timeFromLastSync > 3600) {
+			  //was synced but no sync for 1 hour
+			  syncState = SYNC_LOST;
+		  }
+	  }
+
 	  if (prevSyncState != syncState) {
 
 		  // toggle PPS output
 		  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2,
 				  syncState == SYNCED ? 3600000 : 0
 		  );
+
+		  // deal with ERROR output
+		  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, (syncState == SYNC_LOST));
 
 		  prevSyncState = syncState;
 	  }
