@@ -12,12 +12,12 @@
 #define BIT_NUM 96
 #define BUFFER_SIZE 200
 
-const int32_t triangleWidth = 100;
+static uint32_t triangleWidth;
 
 int32_t circBuf[BUFFER_SIZE];
 size_t circBufPtr = 0;
 
-uint32_t baudratePeriod = 176; 	//8789.0625/50 (samples per second/bits per second -> samples/bit)
+static uint32_t baudratePeriod = 176; 	//8789.0625/50 (samples per second/bits per second -> samples/bit)
 
 size_t sampleCnt = 0;
 uint8_t bits[BIT_NUM];
@@ -38,12 +38,15 @@ typedef enum {
 static state_t state = WAIT;
 static state_t prevState = WAIT;
 
-void phaseMod_init(uint32_t sampleRate, uint32_t baudRate)
+uint32_t phaseMod_init(uint32_t sampleRate, uint32_t baudRate, uint32_t syncBitWidth)
 {
 	baudratePeriod = sampleRate/baudRate;
-
 	//division correction
 	if ((sampleRate % baudRate) > (baudRate/2))baudratePeriod++;
+
+	triangleWidth = syncBitWidth;
+
+	return baudratePeriod;
 }
 
 uint8_t* phaseMod_getBitstream(size_t *size) {

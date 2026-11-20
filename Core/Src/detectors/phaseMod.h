@@ -19,7 +19,7 @@ typedef enum {
 	FAIL_INVALID_PREAMBLE
 } phaseModReturn_t;
 
-void phaseMod_init(uint32_t sampleRate, uint32_t baudRate);
+uint32_t phaseMod_init(uint32_t sampleRate, uint32_t baudRate, uint32_t syncBitWidth);
 phaseModReturn_t phaseMod_push(int32_t sample);
 
 uint8_t* phaseMod_getBitstream(size_t* size);

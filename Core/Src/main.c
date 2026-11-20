@@ -48,9 +48,12 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+// ADC cycles per sample
+#define RF_TICKS_PER_SAMPLE 32
+
 // rf sample rate
 // cpu freq / ADC cycles per sample -> ~2.25 MSPS
-#define RF_SAMPLE_RATE 72000000 / 32
+#define RF_SAMPLE_RATE 72000000 / RF_TICKS_PER_SAMPLE
 
 #define INPUT_SAMPLES 8192
 #define INPUT_HALF_SAMPLES INPUT_SAMPLES/2
@@ -61,6 +64,9 @@
 
 #define AF_SAMPLES (INPUT_SAMPLES>>RF_IF_DECIMATION_POW2)
 #define AF_HALF_SAMPLES AF_SAMPLES/2
+
+// AF ticks per sample (RF ticks per sample*decimation ratio)
+#define AF_TICKS_PER_SAMPLE (RF_TICKS_PER_SAMPLE<<RF_IF_DECIMATION_POW2)
 
 #define OUTPUT_SAMPLES 128
 #define OUTPUT_HALF_SAMPLES OUTPUT_SAMPLES/2
@@ -148,6 +154,13 @@ uint16_t dcOffset;
 #define AGC_FILTER_WINDOW_ORDER 8		//256
 uint32_t agc;
 
+// num of samples from sync bit peak occured to detected
+// shared to phaseMod, but needed to calculate sync diff
+const uint32_t phaseModSyncBitWidth = 100;
+
+// num of samples per PCSK225 bit (calculated by phaseMod_init)
+uint32_t samplesPerPcskBit = 0;
+
 enum {
 	IDLE,
 	DECODE_PCSK225,
@@ -172,6 +185,8 @@ volatile uint32_t lockSyncTimerReset = 0;
 // flag that occurs that we have recived legit eCzas frame and will be used to sync
 volatile uint32_t eczasFrameRecvd = 0;
 
+// offset between first bit and sync timer started in samples
+volatile uint32_t syncTimerOffset = 0;
 
 // sync status
 typedef enum {
@@ -255,7 +270,7 @@ int main(void)
   //init detectors
   amDetector_init();
   pll_init(RF_SAMPLE_RATE,0);
-  phaseMod_init(AF_SAMPLE_RATE,50);
+  samplesPerPcskBit = phaseMod_init(AF_SAMPLE_RATE,50,phaseModSyncBitWidth);
 
   // init PPS timer
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
@@ -318,7 +333,9 @@ int main(void)
 				  phaseModReturn_t phaseModRet = (uint16_t)phaseMod_push(phaseMod);
 
 				  if (phaseModRet == FOUND_SYNC_ZERO) {
-					  // TODO calculate time diff
+					  // Calculate time diff
+					  // samples from current sample to end + samples from middle of sync sample to sample which confirms it
+					  syncTimerOffset = afBufferEnd-afBuffer + phaseModSyncBitWidth;
 
 					  // lock timer resetting by ADC callbacks
 					  lockSyncTimerReset = 1;
@@ -370,6 +387,10 @@ int main(void)
 		  pcsk225_print(&huart1,&pcsk);
 
 		  if (pcsk.header == 0x60) {
+			  // calculate offset between first met header bit and real first header bit
+			  size_t missingHeaderBits = 16-pcsk.preambleLen;
+			  syncTimerOffset += missingHeaderBits*samplesPerPcskBit;
+
 			  decoderState = DECODE_ECZAS;
 		  } else {
 			  decoderState = IDLE;
@@ -1055,10 +1076,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		wasTick = 1;
 	} else if (htim->Instance == TIM1 ) {
 		// sync timer
-
-		// TODO load proper value, calculated as diff from real sync
-		// to ADC callback
-		__HAL_TIM_SET_COUNTER(&htim2, 0);
+		// now we are 2 secs (interrupt period) + syncTimerOffset samples from sync time
+		// so we add 2 seconds to timestamp received from eCzas frame (done in main loop)
+		// also we need to push PPS timer by some extra time forward, which happens here
+		__HAL_TIM_SET_COUNTER(&htim2, syncTimerOffset*AF_TICKS_PER_SAMPLE);
 
 		wasSyncIRQ = 1;
 	}
