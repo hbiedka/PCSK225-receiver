@@ -393,6 +393,8 @@ int main(void)
 
 			  decoderState = DECODE_ECZAS;
 		  } else {
+			  //cancel timer lock
+			  lockSyncTimerReset = 0;
 			  decoderState = IDLE;
 		  }
 	  } else if (decoderState == DECODE_ECZAS) {
