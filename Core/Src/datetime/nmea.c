@@ -22,11 +22,15 @@ void nmea_sendGPRMCFromTimestamp(UART_HandleTypeDef *tty, uint32_t timestamp, ui
 }
 
 void nmea_sendGPRMCFromDT(UART_HandleTypeDef *tty, DateTime *dt) {
-    char body[80];
+    char body[100];
     uint8_t checksum = 0;
 
+    // prepare NMEA frame
+    // Lat/lon points transmitter site coordinates
+    // (speed too, transmitter should not move...)
+    // Mode M means it is manualy typed, not read from actual GPS
     int body_len = snprintf(body, sizeof(body),
-        "GPRMC,%02d%02d%02d.%02d,V,,,,,,%02d%02d%02d,,,N",
+        "GPRMC,%02d%02d%02d.%02d,A,5301.2167,N,01815.7333,E,0.0,0.0,%02d%02d%02d,0.0,E,M",
         dt->hour,
         dt->minute,
         dt->second,
