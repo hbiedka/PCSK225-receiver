@@ -11,7 +11,7 @@
 #include "main.h"
 #include "datetime.h"
 
-void nmea_sendGPRMCFromTimestamp(UART_HandleTypeDef *tty, uint32_t timestamp);
+void nmea_sendGPRMCFromTimestamp(UART_HandleTypeDef *tty, uint32_t timestamp, uint8_t cents);
 void nmea_sendGPRMCFromDT(UART_HandleTypeDef *tty, DateTime *dt);
 
 

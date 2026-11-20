@@ -15,6 +15,7 @@ void secondsToDatetime(uint64_t seconds, DateTime *dt)
     dt->hour = secsInDay / 3600;
     dt->minute = (secsInDay % 3600) / 60;
     dt->second = secsInDay % 60;
+    dt->cents = 0;
 
     // We are starting from 2000
     uint32_t year = 2000;

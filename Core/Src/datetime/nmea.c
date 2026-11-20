@@ -13,8 +13,9 @@
 static char buffer[100];
 
 
-void nmea_sendGPRMCFromTimestamp(UART_HandleTypeDef *tty, uint32_t timestamp) {
+void nmea_sendGPRMCFromTimestamp(UART_HandleTypeDef *tty, uint32_t timestamp, uint8_t cents) {
 	DateTime dt;
+	dt.cents = cents;
 	secondsToDatetime(timestamp,&dt);
 	nmea_sendGPRMCFromDT(tty,&dt);
 
@@ -25,10 +26,11 @@ void nmea_sendGPRMCFromDT(UART_HandleTypeDef *tty, DateTime *dt) {
     uint8_t checksum = 0;
 
     int body_len = snprintf(body, sizeof(body),
-        "GPRMC,%02d%02d%02d.00,V,,,,,,%02d%02d%02d,,,N",
+        "GPRMC,%02d%02d%02d.%02d,V,,,,,,%02d%02d%02d,,,N",
         dt->hour,
         dt->minute,
         dt->second,
+		dt->cents,
         dt->day,
         dt->month,
         (dt->year % 100) // format YY

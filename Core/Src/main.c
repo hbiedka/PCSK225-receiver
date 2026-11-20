@@ -419,8 +419,11 @@ int main(void)
 		  wasTick = 0;
 
 		  // send timestamp over NMEA interface (if synced only, severy 10 secs)
-		  if (syncState == SYNCED && mstTimer % 10 == 0)
-			  nmea_sendGPRMCFromTimestamp(&huart1,mstTimer);
+		  if (syncState == SYNCED && mstTimer % 10 == 0) {
+			  // get secs/100 (PPS timer value/ticks per 1/100 sec)
+			  uint32_t secCents = __HAL_TIM_GET_COUNTER(&htim2)/720000;
+			  nmea_sendGPRMCFromTimestamp(&huart1,mstTimer,secCents);
+		  }
 	  } else if (wasSyncIRQ) {
 		  wasSyncIRQ = 0;
 
