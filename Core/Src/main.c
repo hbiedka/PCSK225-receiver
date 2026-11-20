@@ -174,11 +174,14 @@ volatile uint32_t eczasFrameRecvd = 0;
 
 
 // sync status
-enum {
+typedef enum {
 	INIT_NO_SYNC,
 	SYNCED,
 	SYNC_LOST
-} syncState = INIT_NO_SYNC;
+} syncState_t;
+
+syncState_t syncState = INIT_NO_SYNC;
+syncState_t prevSyncState = INIT_NO_SYNC;
 
 // timestamp of last sync	(0 means no sync)
 uint32_t lastSyncAt = 0;
@@ -255,9 +258,8 @@ int main(void)
   phaseMod_init(AF_SAMPLE_RATE,50);
 
   // init PPS timer
-  //TODO do not generate PWM until synced
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
-  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 3600000);
+  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0);	// no PWM cause we are not synced yet
   __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
 
   HAL_TIM_Base_Start_IT(&htim1);
@@ -390,8 +392,8 @@ int main(void)
 	  if (wasTick) {
 		  wasTick = 0;
 
-		  // send timestamp over NMEA interface (every 10 secs)
-		  if (mstTimer % 10 == 0)
+		  // send timestamp over NMEA interface (if synced only, severy 10 secs)
+		  if (syncState == SYNCED && mstTimer % 10 == 0)
 			  nmea_sendGPRMCFromTimestamp(&huart1,mstTimer);
 	  } else if (wasSyncIRQ) {
 		  wasSyncIRQ = 0;
@@ -411,6 +413,16 @@ int main(void)
 
 		  //unlock sync timer resets
 		  lockSyncTimerReset = 0;
+	  }
+
+	  if (prevSyncState != syncState) {
+
+		  // toggle PPS output
+		  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2,
+				  syncState == SYNCED ? 3600000 : 0
+		  );
+
+		  prevSyncState = syncState;
 	  }
 
   }
