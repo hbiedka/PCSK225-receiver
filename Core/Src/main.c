@@ -402,7 +402,8 @@ int main(void)
 		  }
 	  } else if (decoderState == DECODE_ECZAS) {
 			  eCzas_decode(&pcsk,&eCzas);
-			  eCzas_print(&huart1,&eCzas);
+			  // uncomment for debug info (but it may stuck waiting for UART free so
+			  // eCzas_print(&huart1,&eCzas);
 
 			  if (eCzas_verify(&eCzas)) {
 				  // we have received legit frame
@@ -422,7 +423,7 @@ int main(void)
 		  if (syncState == SYNCED && mstTimer % 10 == 0) {
 			  // get secs/100 (PPS timer value/ticks per 1/100 sec)
 			  uint32_t secCents = __HAL_TIM_GET_COUNTER(&htim2)/720000;
-			  nmea_sendGPRMCFromTimestamp(&huart1,mstTimer,secCents);
+			  nmea_sendGPRMCFromTimestamp(&huart3,mstTimer,secCents);
 		  }
 	  } else if (wasSyncIRQ) {
 		  wasSyncIRQ = 0;
@@ -965,7 +966,7 @@ static void MX_USART3_UART_Init(void)
 
   /* USER CODE END USART3_Init 1 */
   huart3.Instance = USART3;
-  huart3.Init.BaudRate = 115200;
+  huart3.Init.BaudRate = 38400;
   huart3.Init.WordLength = UART_WORDLENGTH_8B;
   huart3.Init.StopBits = UART_STOPBITS_1;
   huart3.Init.Parity = UART_PARITY_NONE;
