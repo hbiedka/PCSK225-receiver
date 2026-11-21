@@ -31,7 +31,7 @@ There is also AM detector which sends low-quality (but audible) Polish Radio 1 p
 | PC7 | Error LED | High if there is no sync frame from 3 minutes from start or last sync was 1 hour ago |
 | PA2 | I/Q output UART | Nucleo ST-Link UART: provides raw I/Q frame, can be pushed via `tools/iq2zmq.py` to ZeroMQ and then to GNU Radio - 961200 baud 8N1
 | PA9 | General-purpose UART | Sends raw PCSK225 frames using format `:<header>:<payload>\r\n` in hex format - 115200 baud 8N1
-| PB10 | NMEA 0183 output | GPS receivers - compatible output for time frames - 38400 baut 8N1
+| PB10 | NMEA 0183 output | GPS receivers - compatible output for time frames - 38400 baud 8N1
 
 ### GNU Radio integration
 Running `tools/iq2zmq.py` fetches data from UART `/dev/ttyACM0` (may be changed) and opens ZeroMQ socket. There is GNU Radio project in `gnuradio/` dir which fetches ZeroMQ data and provides basic features (phase/amplitude chart, constellation, waterfall) and audio output.
@@ -46,7 +46,7 @@ According to [e-Czas project hompage](https://e-czas.gum.gov.pl/e-czas-radio) th
 * accuracy of frame sent by transmitter site - [this](https://www.pa3fwm.nl/signals/poland225kHz/) research proves that there was accuracy issues just after signal has been launched.
 * real begin of frame (see below)
 
-There is no explanation of actual "zero point" of frame but comparing to full-hour beeps sent over Polish Radio 1 audio I assume that it is **peak of first zero in sync burst**, but I am not entirely sure. To be confirmed by GUM (maintainer of the time code).
+There is no explanation of actual "zero point" of frame but comparing to full-hour beeps sent over Polish Radio 1 audio I assume that it is the **peak of first zero in sync burst**, but I am not entirely sure. To be confirmed by GUM (maintainer of the time code).
 
 The microsecond precision (like GPS) cannot be reached here.
 
