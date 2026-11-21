@@ -38,7 +38,7 @@ typedef enum {
 static state_t state = WAIT;
 static state_t prevState = WAIT;
 
-static void driveCarrierLED() {
+static void driveRxLED() {
 	if (prevState != state) {
 		//state changed - deal with RX led
 		if (state == RECV_STABLE) HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);
@@ -148,15 +148,15 @@ phaseModReturn_t phaseMod_push(int32_t sample)
 			state = WAIT;
 	}
 
-	//update Carrrier LED
-	driveCarrierLED();
+	//update Rx LED
+	driveRxLED();
 	return ret;
 }
 
 void phaseMod_cancel()
 {
 	state = WAIT;
-	driveCarrierLED();
+	driveRxLED();
 }
 
 

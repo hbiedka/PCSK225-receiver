@@ -347,7 +347,7 @@ int main(void)
 					  lockSyncTimerReset = 0;
 				  }
 			  } else {
-				  // reset phaseMod internal state machine and Carrier LED
+				  // reset phaseMod internal state machine and Rx LED
 				  phaseMod_cancel();
 			  }
 
