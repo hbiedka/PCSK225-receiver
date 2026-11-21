@@ -5,7 +5,7 @@ This is an implementation of fully software-based solution to demodulate longwav
 ## Features
 
 * **There is no RF frontend at all!**. STM32 deals with pure RF pushed to ADC and demodulation to I/Q signal is fully software-based. No hardware DSP here, only DMA sampling,
-* **NMEA 0813 - compatible UART output** - when synced, sends $GPRMC frame with current date and time,
+* **NMEA 0183 - compatible UART output** - when synced, sends $GPRMC frame with current date and time,
 * **1PPS output** - timer controlled - can be used (both with NMEA) to provide precise* time synchronization,
 * **General-purpose UART** sends raw PCSK225 frames received (both e-Czas and third-party).
 * **GNU Radio integration** - I/Q signal is sent over UART and can be pushed to GNU Radio software
